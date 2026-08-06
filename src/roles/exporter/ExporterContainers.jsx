@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+// roles/exporter/ExporterContainers.jsx
+import React, { useState, useContext, useEffect } from 'react';
 import {
   Container,
   Package,
@@ -46,19 +47,27 @@ import {
   RotateCw,
   Layers,
   Grid,
-  List
+  List,
+  Building,
+  SortAsc,
+  SortDesc
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
+import { useAuth } from '../../context/authContext';
 import { useNavigate } from 'react-router-dom';
 
 const ExporterContainers = () => {
   const navigate = useNavigate();
   const { darkMode } = useContext(ThemeContext);
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterVessel, setFilterVessel] = useState('all');
+  const [filterCompany, setFilterCompany] = useState('all');
   const [expandedContainer, setExpandedContainer] = useState(null);
   const [viewMode, setViewMode] = useState('list');
+  const [sortBy, setSortBy] = useState('company');
+  const [sortOrder, setSortOrder] = useState('asc');
 
   const colors = {
     primary: '#714b67',
@@ -72,12 +81,14 @@ const ExporterContainers = () => {
     info: '#3b82f6',
   };
 
-  const isDark = darkMode
+  const isDark = darkMode;
+  const userCompany = user?.companyName || user?.company || '';
 
-  // All containers data
+  // All containers data with company association
   const containersData = [
     {
       id: 'MSKU-458921',
+      company: 'ImportFlow Ltd',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -101,6 +112,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'MSKU-458922',
+      company: 'ImportFlow Ltd',
       status: 'Loaded',
       type: 'Standard 40ft',
       destination: 'Port of Mombasa',
@@ -123,6 +135,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'MSKU-458923',
+      company: 'ImportFlow Ltd',
       status: 'In Transit',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -144,6 +157,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'IN-782341',
+      company: 'East Africa Trading Co',
       status: 'Unloading',
       type: 'Standard 20ft',
       destination: 'Kampala, Uganda',
@@ -166,6 +180,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'IN-782342',
+      company: 'East Africa Trading Co',
       status: 'Customs Hold',
       type: 'Standard 20ft',
       destination: 'Kampala, Uganda',
@@ -187,6 +202,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'SA-456732',
+      company: 'Global Importers Inc',
       status: 'Delivered',
       type: 'Standard 40ft',
       destination: 'Nairobi, Kenya',
@@ -209,6 +225,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'JP-893421',
+      company: 'Rwanda Exporters',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -230,6 +247,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'JP-893422',
+      company: 'Rwanda Exporters',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -252,6 +270,7 @@ const ExporterContainers = () => {
     },
     {
       id: 'TR-782341',
+      company: 'Uganda Exports Ltd',
       status: 'In Transit',
       type: 'Truck Container',
       destination: 'Port of Mombasa',
@@ -270,22 +289,124 @@ const ExporterContainers = () => {
       contents: [
         { name: 'Fresh Produce', quantity: 120, weight: '4.5 tons' }
       ]
+    },
+    {
+      id: 'MSKU-458924',
+      company: 'ImportFlow Ltd',
+      status: 'In Customs',
+      type: 'Standard 20ft',
+      destination: 'Kampala, Uganda',
+      vessel: 'MV Pacific Voyager',
+      voyage: 'PV-2026-045',
+      location: 'Customs Bond',
+      coordinates: { lat: -4.05, lng: 39.67 },
+      eta: '22 Sep 2026 16:00',
+      lastUpdate: '1 day ago',
+      weight: '4.5 tons',
+      capacity: '28.2 tons',
+      items: 280,
+      sealNumber: 'SEAL-2026-0798',
+      progress: 35,
+      color: colors.orange,
+      contents: [
+        { name: 'Medical Equipment', quantity: 280, weight: '4.5 tons' },
+        { name: 'Lab Supplies', quantity: 150, weight: '0.8 tons' }
+      ]
+    },
+    {
+      id: 'MSKU-458925',
+      company: 'Uganda Exports Ltd',
+      status: 'Scheduled',
+      type: 'Standard 40ft HC',
+      destination: 'Dar es Salaam, Tanzania',
+      vessel: 'MV Star Express',
+      voyage: 'SE-2026-079',
+      location: 'Kampala Depot',
+      coordinates: { lat: 0.3, lng: 32.6 },
+      eta: '15 Oct 2026 08:00',
+      lastUpdate: '3 days ago',
+      weight: '8.2 tons',
+      capacity: '30.2 tons',
+      items: 500,
+      sealNumber: 'SEAL-2026-0799',
+      progress: 10,
+      color: colors.info,
+      contents: [
+        { name: 'Agricultural Equipment', quantity: 500, weight: '8.2 tons' }
+      ]
     }
   ];
 
+  // Get unique companies
+  const uniqueCompanies = ['all', ...new Set(containersData.map(c => c.company).filter(Boolean))];
+
   // Get unique vessels for filter
   const vessels = ['all', ...new Set(containersData.map(c => c.vessel))];
-  const statusOptions = ['all', 'Loaded', 'In Transit', 'Unloading', 'Customs Hold', 'Delivered'];
+  const statusOptions = ['all', 'Loaded', 'In Transit', 'Unloading', 'Customs Hold', 'Delivered', 'In Customs', 'Scheduled'];
 
-  // Filter containers
+  // Filter and sort containers
   const filteredContainers = containersData.filter(container => {
     const matchesSearch = container.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           container.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          container.vessel.toLowerCase().includes(searchQuery.toLowerCase());
+                          container.vessel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          container.company.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || container.status === filterStatus;
     const matchesVessel = filterVessel === 'all' || container.vessel === filterVessel;
-    return matchesSearch && matchesStatus && matchesVessel;
+    const matchesCompany = filterCompany === 'all' || container.company === filterCompany;
+    return matchesSearch && matchesStatus && matchesVessel && matchesCompany;
   });
+
+  // Sort filtered containers
+  const sortedContainers = [...filteredContainers].sort((a, b) => {
+    let valA, valB;
+    
+    switch(sortBy) {
+      case 'company':
+        valA = (a.company || '').toLowerCase();
+        valB = (b.company || '').toLowerCase();
+        break;
+      case 'status':
+        valA = a.status || '';
+        valB = b.status || '';
+        break;
+      case 'vessel':
+        valA = a.vessel || '';
+        valB = b.vessel || '';
+        break;
+      case 'eta':
+        valA = new Date(a.eta || 0);
+        valB = new Date(b.eta || 0);
+        break;
+      default:
+        valA = a.company || '';
+        valB = b.company || '';
+    }
+    
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Group containers by company
+  const groupedContainers = sortedContainers.reduce((groups, container) => {
+    const company = container.company || 'Unknown';
+    if (!groups[company]) {
+      groups[company] = [];
+    }
+    groups[company].push(container);
+    return groups;
+  }, {});
+
+  const companyNames = Object.keys(groupedContainers).sort();
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Get status badge style
   const getStatusBadge = (status) => {
@@ -294,7 +415,9 @@ const ExporterContainers = () => {
       'Unloading': { backgroundColor: colors.warning + '20', color: colors.warning },
       'In Transit': { backgroundColor: colors.info + '20', color: colors.info },
       'Customs Hold': { backgroundColor: colors.danger + '20', color: colors.danger },
-      'Delivered': { backgroundColor: colors.primary + '20', color: colors.primary }
+      'Delivered': { backgroundColor: colors.primary + '20', color: colors.primary },
+      'In Customs': { backgroundColor: colors.orange + '20', color: colors.orange },
+      'Scheduled': { backgroundColor: colors.info + '20', color: colors.info }
     };
     return statusMap[status] || { backgroundColor: colors.primary + '20', color: colors.primary };
   };
@@ -321,11 +444,212 @@ const ExporterContainers = () => {
     navigate(`/exporter-containers/${id}`);
   };
 
+  // Get company count
+  const getCompanyCount = (company) => {
+    if (company === 'all') return containersData.length;
+    return containersData.filter(c => c.company === company).length;
+  };
+
   // Stats
   const totalContainers = containersData.length;
   const inTransit = containersData.filter(c => c.status === 'In Transit' || c.status === 'Loaded').length;
-  const inPort = containersData.filter(c => c.status === 'Unloading' || c.status === 'Customs Hold').length;
+  const inPort = containersData.filter(c => c.status === 'Unloading' || c.status === 'Customs Hold' || c.status === 'In Customs').length;
   const delivered = containersData.filter(c => c.status === 'Delivered').length;
+
+  // Render container card
+  const renderContainerCard = (container) => {
+    const isExpanded = expandedContainer === container.id;
+    const statusStyle = getStatusBadge(container.status);
+    const progressColor = getProgressColor(container.progress);
+
+    return (
+      <div
+        key={container.id}
+        className={`rounded-lg transition-all duration-300 ${
+          isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+        } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(container.id)}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                <Container className="w-5 h-5" style={{ color: colors.primary }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 
+                    className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      viewContainerDetails(container.id);
+                    }}
+                  >
+                    {container.id}
+                  </h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
+                    {container.status}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                    {container.type}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                    <Building className="w-3 h-3 inline mr-1" />
+                    {container.company}
+                  </span>
+                </div>
+                <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {container.vessel} • {container.location}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <MapPin className="w-3 h-3 inline mr-1" />
+                {container.destination}
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Package className="w-3 h-3 inline mr-1" />
+                {container.items} items
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Clock className="w-3 h-3 inline mr-1" />
+                ETA: {container.eta}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Progress
+                </span>
+                <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {container.progress}%
+                </span>
+              </div>
+              <div className="w-24 md:w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ 
+                    width: `${container.progress}%`,
+                    backgroundColor: progressColor
+                  }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => viewContainerDetails(container.id)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="View Details"
+            >
+              <Eye className="w-4 h-4" style={{ color: colors.primary }} />
+            </button>
+            <button
+              onClick={() => toggleExpand(container.id)}
+              className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+              style={{ color: colors.primary }}
+            >
+              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Weight</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.weight}</p>
+              </div>
+              <div>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacity</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.capacity}</p>
+              </div>
+              <div>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Items</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.items}</p>
+              </div>
+              <div>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal Number</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNumber}</p>
+              </div>
+            </div>
+
+            {/* Contents Preview */}
+            <div>
+              <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Items in Container ({container.contents.length} types)
+              </p>
+              <div className="space-y-1">
+                {container.contents.map((item, idx) => (
+                  <div key={idx} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</span>
+                    <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Qty: {item.quantity} • {item.weight}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                onClick={() => viewContainerDetails(container.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                style={{
+                  backgroundColor: colors.primary,
+                  color: 'white'
+                }}
+              >
+                <Eye className="w-4 h-4" />
+                View Full Details
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render company section
+  const renderCompanySection = (company) => {
+    const containers = groupedContainers[company];
+    
+    return (
+      <div key={company} className={`rounded-lg overflow-hidden border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        {/* Company Header */}
+        <div className={`px-4 py-3 flex items-center gap-3 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <Building className="w-5 h-5" style={{ color: colors.primary }} />
+          <div>
+            <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {company}
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                {containers.length} containers
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                In Transit: {containers.filter(c => c.status === 'In Transit' || c.status === 'Loaded').length}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700`}>
+                In Port: {containers.filter(c => c.status === 'Unloading' || c.status === 'Customs Hold' || c.status === 'In Customs').length}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700`}>
+                Delivered: {containers.filter(c => c.status === 'Delivered').length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Company Containers */}
+        <div className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+          {containers.map((container) => renderContainerCard(container))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
@@ -337,8 +661,14 @@ const ExporterContainers = () => {
               All Containers
             </h1>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Track and manage all containers across your fleet
+              Track and manage all containers grouped by company
             </p>
+            {user && (
+              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                <Building className="w-3 h-3 inline mr-1" />
+                {user.companyName || userCompany || 'Your Company'}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -396,7 +726,7 @@ const ExporterContainers = () => {
               <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
               <input
                 type="text"
-                placeholder="Search by container ID, destination, or vessel..."
+                placeholder="Search by container ID, destination, vessel, or company..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full pl-10 pr-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 ${
@@ -406,6 +736,24 @@ const ExporterContainers = () => {
               />
             </div>
             <div className="flex gap-2 flex-wrap">
+              <div className="relative">
+                <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                <select
+                  value={filterCompany}
+                  onChange={(e) => setFilterCompany(e.target.value)}
+                  className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 appearance-none min-w-[150px] ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                >
+                  <option value="all">All Companies ({containersData.length})</option>
+                  {uniqueCompanies.filter(c => c !== 'all').map(company => (
+                    <option key={company} value={company}>
+                      {company} ({getCompanyCount(company)})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+              </div>
               <div className="relative">
                 <Filter className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
                 <select
@@ -445,6 +793,7 @@ const ExporterContainers = () => {
                   setSearchQuery('');
                   setFilterStatus('all');
                   setFilterVessel('all');
+                  setFilterCompany('all');
                 }}
                 className={`px-4 py-2.5 rounded-lg border transition-all duration-200 ${
                   isDark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -454,6 +803,62 @@ const ExporterContainers = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Sort Controls */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Sort by:</span>
+          <button
+            onClick={() => handleSort('company')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'company' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <Building className="w-3 h-3" />
+            Company
+            {sortBy === 'company' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <button
+            onClick={() => handleSort('status')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'status' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <CheckCircle className="w-3 h-3" />
+            Status
+            {sortBy === 'status' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <button
+            onClick={() => handleSort('vessel')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'vessel' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <Ship className="w-3 h-3" />
+            Vessel
+            {sortBy === 'vessel' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <button
+            onClick={() => handleSort('eta')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'eta' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            ETA
+            {sortBy === 'eta' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <span className={`ml-auto text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {sortedContainers.length} containers
+          </span>
         </div>
 
         {/* View Toggle */}
@@ -487,246 +892,114 @@ const ExporterContainers = () => {
         </div>
 
         {/* Containers List/Grid */}
-        {viewMode === 'list' ? (
-          <div className="space-y-3">
-            {filteredContainers.map((container) => {
-              const isExpanded = expandedContainer === container.id;
-              const statusStyle = getStatusBadge(container.status);
-              const progressColor = getProgressColor(container.progress);
-
-              return (
-                <div
-                  key={container.id}
-                  className={`rounded-lg transition-all duration-300 ${
-                    isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-                  } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(container.id)}>
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
-                          <Container className="w-5 h-5" style={{ color: colors.primary }} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 
-                              className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                viewContainerDetails(container.id);
-                              }}
-                            >
-                              {container.id}
-                            </h3>
-                            <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
-                              {container.status}
-                            </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                              {container.type}
-                            </span>
-                          </div>
-                          <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.vessel} • {container.location}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <MapPin className="w-3 h-3 inline mr-1" />
-                          {container.destination}
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Package className="w-3 h-3 inline mr-1" />
-                          {container.items} items
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Clock className="w-3 h-3 inline mr-1" />
-                          ETA: {container.eta}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Progress
-                          </span>
-                          <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {container.progress}%
-                          </span>
-                        </div>
-                        <div className="w-24 md:w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ 
-                              width: `${container.progress}%`,
-                              backgroundColor: progressColor
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => viewContainerDetails(container.id)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" style={{ color: colors.primary }} />
-                      </button>
-                      <button
-                        onClick={() => toggleExpand(container.id)}
-                        className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                        style={{ color: colors.primary }}
-                      >
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded Content */}
-                  {isExpanded && (
-                    <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Weight</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.weight}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacity</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.capacity}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Items</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.items}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal Number</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNumber}</p>
-                        </div>
-                      </div>
-
-                      {/* Contents Preview */}
-                      <div>
-                        <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          Items in Container ({container.contents.length} types)
-                        </p>
-                        <div className="space-y-1">
-                          {container.contents.map((item, idx) => (
-                            <div key={idx} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                              <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</span>
-                              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                Qty: {item.quantity} • {item.weight}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <button
-                          onClick={() => viewContainerDetails(container.id)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
-                          style={{
-                            backgroundColor: colors.primary,
-                            color: 'white'
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                          View Full Details
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          // Grid View
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredContainers.map((container) => {
-              const statusStyle = getStatusBadge(container.status);
-              const progressColor = getProgressColor(container.progress);
-
-              return (
-                <div
-                  key={container.id}
-                  className={`rounded-lg p-4 transition-all duration-300 cursor-pointer hover:shadow-lg ${
-                    isDark ? 'bg-gray-800 border border-gray-700 hover:border-gray-600' : 'bg-white shadow-md hover:shadow-xl'
-                  }`}
-                  onClick={() => viewContainerDetails(container.id)}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
-                        <Container className="w-4 h-4" style={{ color: colors.primary }} />
-                      </div>
-                      <div>
-                        <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {container.id}
-                        </h3>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {container.vessel}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
-                      {container.status}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs mb-2">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                      <MapPin className="w-3 h-3 inline mr-1" />
-                      {container.location}
-                    </span>
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                      <Package className="w-3 h-3 inline mr-1" />
-                      {container.items}
-                    </span>
-                  </div>
-
-                  <div className="mt-2">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Progress</span>
-                      <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.progress}%
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ 
-                          width: `${container.progress}%`,
-                          backgroundColor: progressColor
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                    <div className="flex items-center gap-1 text-xs">
-                      <Clock className="w-3 h-3" style={{ color: colors.primary }} />
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA: {container.eta}</span>
-                    </div>
-                    <button
-                      className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      style={{ color: colors.primary }}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {filteredContainers.length === 0 && (
+        {sortedContainers.length === 0 ? (
           <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             <Container className="w-16 h-16 mx-auto mb-4 opacity-50" />
             <p className="text-lg font-medium">No containers found</p>
             <p className="text-sm">Try adjusting your search or filters</p>
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="space-y-4">
+            {companyNames.map(company => renderCompanySection(company))}
+          </div>
+        ) : (
+          // Grid View - Grouped by company with headers
+          <div className="space-y-6">
+            {companyNames.map(company => {
+              const containers = groupedContainers[company];
+              return (
+                <div key={company}>
+                  <div className={`px-3 py-2 mb-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <div className="flex items-center gap-2">
+                      <Building className="w-4 h-4" style={{ color: colors.primary }} />
+                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {company}
+                      </span>
+                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        ({containers.length} containers)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {containers.map((container) => {
+                      const statusStyle = getStatusBadge(container.status);
+                      const progressColor = getProgressColor(container.progress);
+
+                      return (
+                        <div
+                          key={container.id}
+                          className={`rounded-lg p-4 transition-all duration-300 cursor-pointer hover:shadow-lg ${
+                            isDark ? 'bg-gray-800 border border-gray-700 hover:border-gray-600' : 'bg-white shadow-md hover:shadow-xl'
+                          }`}
+                          onClick={() => viewContainerDetails(container.id)}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                                <Container className="w-4 h-4" style={{ color: colors.primary }} />
+                              </div>
+                              <div>
+                                <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                  {container.id}
+                                </h3>
+                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {container.vessel}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
+                              {container.status}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs mb-2">
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <MapPin className="w-3 h-3 inline mr-1" />
+                              {container.location}
+                            </span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <Package className="w-3 h-3 inline mr-1" />
+                              {container.items}
+                            </span>
+                          </div>
+
+                          <div className="mt-2">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Progress</span>
+                              <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {container.progress}%
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${container.progress}%`,
+                                  backgroundColor: progressColor
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                            <div className="flex items-center gap-1 text-xs">
+                              <Clock className="w-3 h-3" style={{ color: colors.primary }} />
+                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA: {container.eta}</span>
+                            </div>
+                            <button
+                              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              style={{ color: colors.primary }}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -1,3 +1,4 @@
+// roles/exporter/ExporterShipments.jsx
 import React, { useState, useContext } from 'react';
 import {
   Package,
@@ -41,7 +42,10 @@ import {
   FileSignature,
   CreditCard,
   Shield,
-  FileBarChart
+  FileBarChart,
+  Grid,
+  SortAsc,
+  SortDesc
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
@@ -55,8 +59,11 @@ const ExporterShipments = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterImporter, setFilterImporter] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterCompany, setFilterCompany] = useState('all');
   const [expandedShipment, setExpandedShipment] = useState(null);
   const [viewMode, setViewMode] = useState('list');
+  const [sortBy, setSortBy] = useState('company');
+  const [sortOrder, setSortOrder] = useState('asc');
 
   const colors = {
     primary: '#714b67',
@@ -74,12 +81,14 @@ const ExporterShipments = () => {
     pink: '#ec4899'
   };
 
-  const isDark = darkMode
+  const isDark = darkMode;
+  const userCompany = user?.companyName || user?.company || '';
 
-  // CORRECTED Shipments data with unique property names
+  // Shipments data with company association
   const shipmentsData = [
     {
       id: 'EXP-001',
+      company: 'ImportFlow Ltd',
       importer: 'ImportFlow Ltd',
       importerId: 'IMP-001',
       importerContact: 'John Doe',
@@ -133,6 +142,7 @@ const ExporterShipments = () => {
     },
     {
       id: 'EXP-002',
+      company: 'Global Importers Inc',
       importer: 'Global Importers Inc',
       importerId: 'IMP-002',
       importerContact: 'Sarah Kamau',
@@ -182,6 +192,7 @@ const ExporterShipments = () => {
     },
     {
       id: 'EXP-003',
+      company: 'East Africa Trading Co',
       importer: 'East Africa Trading Co',
       importerId: 'IMP-003',
       importerContact: 'Peter Habimana',
@@ -231,6 +242,7 @@ const ExporterShipments = () => {
     },
     {
       id: 'EXP-004',
+      company: 'ImportFlow Ltd',
       importer: 'ImportFlow Ltd',
       importerId: 'IMP-001',
       importerContact: 'John Doe',
@@ -282,7 +294,8 @@ const ExporterShipments = () => {
     }
   ];
 
-  // Get unique importers for filter
+  // Get unique companies and importers
+  const uniqueCompanies = ['all', ...new Set(shipmentsData.map(s => s.company || s.importer).filter(Boolean))];
   const importers = ['all', ...new Set(shipmentsData.map(s => s.importer))];
   const statusOptions = ['all', 'Loaded', 'In Transit', 'In Customs', 'Delivered'];
   const typeOptions = ['all', ...new Set(shipmentsData.map(s => s.type))];
@@ -292,12 +305,66 @@ const ExporterShipments = () => {
     const matchesSearch = shipment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           shipment.importer.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           shipment.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          shipment.vessel.toLowerCase().includes(searchQuery.toLowerCase());
+                          shipment.vessel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (shipment.company && shipment.company.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStatus = filterStatus === 'all' || shipment.status === filterStatus;
     const matchesImporter = filterImporter === 'all' || shipment.importer === filterImporter;
     const matchesType = filterType === 'all' || shipment.type === filterType;
-    return matchesSearch && matchesStatus && matchesImporter && matchesType;
+    const matchesCompany = filterCompany === 'all' || (shipment.company || shipment.importer) === filterCompany;
+    return matchesSearch && matchesStatus && matchesImporter && matchesType && matchesCompany;
   });
+
+  // Sort shipments
+  const sortedShipments = [...filteredShipments].sort((a, b) => {
+    let valA, valB;
+    
+    switch(sortBy) {
+      case 'company':
+        valA = (a.company || a.importer || '').toLowerCase();
+        valB = (b.company || b.importer || '').toLowerCase();
+        break;
+      case 'status':
+        valA = a.status || '';
+        valB = b.status || '';
+        break;
+      case 'type':
+        valA = a.type || '';
+        valB = b.type || '';
+        break;
+      case 'date':
+        valA = new Date(a.eta || 0);
+        valB = new Date(b.eta || 0);
+        break;
+      default:
+        valA = a.company || a.importer || '';
+        valB = b.company || b.importer || '';
+    }
+    
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Group by company
+  const groupedShipments = sortedShipments.reduce((groups, shipment) => {
+    const company = shipment.company || shipment.importer || 'Unknown';
+    if (!groups[company]) {
+      groups[company] = [];
+    }
+    groups[company].push(shipment);
+    return groups;
+  }, {});
+
+  const companyNames = Object.keys(groupedShipments).sort();
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Get status badge style
   const getStatusBadge = (status) => {
@@ -347,6 +414,299 @@ const ExporterShipments = () => {
     return <AlertCircle className="w-3 h-3 text-red-500" />;
   };
 
+  // Get company count
+  const getCompanyCount = (company) => {
+    if (company === 'all') return shipmentsData.length;
+    return shipmentsData.filter(s => (s.company || s.importer) === company).length;
+  };
+
+  // Render company section
+  const renderCompanySection = (company) => {
+    const shipments = groupedShipments[company];
+    
+    return (
+      <div key={company} className={`rounded-lg overflow-hidden border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className={`px-4 py-3 flex items-center gap-3 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <Building className="w-5 h-5" style={{ color: colors.primary }} />
+          <div>
+            <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {company}
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                {shipments.length} shipments
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                In Transit: {shipments.filter(s => s.status === 'In Transit' || s.status === 'Loaded').length}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700`}>
+                In Customs: {shipments.filter(s => s.status === 'In Customs').length}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700`}>
+                Delivered: {shipments.filter(s => s.status === 'Delivered').length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+          {shipments.map((shipment) => {
+            const isExpanded = expandedShipment === shipment.id;
+            const statusStyle = getStatusBadge(shipment.status);
+            const progressColor = getProgressColor(shipment.progress);
+            const StatusIcon = statusStyle.icon;
+
+            return (
+              <div
+                key={shipment.id}
+                className={`transition-all duration-300 ${
+                  isDark ? 'bg-gray-800' : 'bg-white'
+                } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(shipment.id)}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                        <Package className="w-5 h-5" style={{ color: colors.primary }} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 
+                            className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              viewShipmentDetails(shipment.id);
+                            }}
+                          >
+                            {shipment.id}
+                          </h3>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1`} style={{
+                            backgroundColor: statusStyle.backgroundColor,
+                            color: statusStyle.color
+                          }}>
+                            <StatusIcon className="w-3 h-3" />
+                            {shipment.status}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                            {shipment.type}
+                          </span>
+                        </div>
+                        <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {shipment.vessel} • {shipment.destination}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
+                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <Package className="w-3 h-3 inline mr-1" />
+                        {shipment.itemCount} items
+                      </span>
+                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <Weight className="w-3 h-3 inline mr-1" />
+                        {shipment.weight}
+                      </span>
+                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        ETA: {shipment.eta}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                          Progress
+                        </span>
+                        <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {shipment.progress}%
+                        </span>
+                      </div>
+                      <div className="w-24 md:w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${shipment.progress}%`,
+                            backgroundColor: progressColor
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => viewShipmentDetails(shipment.id)}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" style={{ color: colors.primary }} />
+                    </button>
+                    <button
+                      onClick={() => toggleExpand(shipment.id)}
+                      className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                      style={{ color: colors.primary }}
+                    >
+                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Content - same as before */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Weight</p>
+                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.weight}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
+                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.volume}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Containers</p>
+                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.containers}</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Value</p>
+                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.value}</p>
+                      </div>
+                    </div>
+
+                    {/* Importer Info */}
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                      <p className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <Building className="w-3 h-3 inline mr-1" />
+                        Importer Information
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Company</p>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importer}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Contact</p>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerContact}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerEmail}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country</p>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerCountry}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Documents Progress */}
+                    <div>
+                      <div className="flex justify-between items-center">
+                        <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          <FileText className="w-3 h-3 inline mr-1" />
+                          Documents ({shipment.documentCount}/{shipment.documentsTotal})
+                        </p>
+                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {Math.round((shipment.documentCount / shipment.documentsTotal) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${(shipment.documentCount / shipment.documentsTotal) * 100}%`,
+                            backgroundColor: colors.primary
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 mt-2">
+                        {shipment.documents.map((doc, idx) => (
+                          <div key={idx} className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {getDocumentStatusIcon(doc.status)}
+                            <span className="truncate">{doc.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Items Preview */}
+                    <div>
+                      <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        Items in Shipment ({shipment.items.length} types)
+                      </p>
+                      <div className="space-y-1">
+                        {shipment.items.map((item, idx) => (
+                          <div key={idx} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {item.name}
+                              </p>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                HS Code: {item.hsCode || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                Qty: {item.quantity}
+                              </p>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {item.weight} • {item.value}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Milestones */}
+                    <div>
+                      <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Milestones</p>
+                      <div className="space-y-1">
+                        {shipment.milestones.map((milestone, idx) => (
+                          <div key={idx} className={`flex items-center gap-2 text-sm ${milestone.completed ? 'text-green-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {milestone.completed ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <Clock className="w-4 h-4" />
+                            )}
+                            <span>{milestone.stage}</span>
+                            <span className="text-xs">{milestone.date}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        onClick={() => viewShipmentDetails(shipment.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                        style={{
+                          backgroundColor: colors.primary,
+                          color: 'white'
+                        }}
+                      >
+                        <Eye className="w-4 h-4" />
+                        View Full Details
+                      </button>
+                      <button
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                        style={{
+                          backgroundColor: colors.primaryBg,
+                          color: colors.primary
+                        }}
+                      >
+                        <FileText className="w-4 h-4" />
+                        View Documents
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
       <div className="max-w-7xl mx-auto">
@@ -357,8 +717,14 @@ const ExporterShipments = () => {
               Export Shipments
             </h1>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Track and manage all your export shipments
+              Track and manage all your export shipments grouped by company
             </p>
+            {user && (
+              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                <Building className="w-3 h-3 inline mr-1" />
+                {user.companyName || userCompany || 'Your Company'}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -427,6 +793,24 @@ const ExporterShipments = () => {
             </div>
             <div className="flex gap-2 flex-wrap">
               <div className="relative">
+                <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                <select
+                  value={filterCompany}
+                  onChange={(e) => setFilterCompany(e.target.value)}
+                  className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 appearance-none min-w-[150px] ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                >
+                  <option value="all">All Companies ({shipmentsData.length})</option>
+                  {uniqueCompanies.filter(c => c !== 'all').map(company => (
+                    <option key={company} value={company}>
+                      {company} ({getCompanyCount(company)})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+              </div>
+              <div className="relative">
                 <Filter className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
                 <select
                   value={filterStatus}
@@ -438,23 +822,6 @@ const ExporterShipments = () => {
                   {statusOptions.map((status) => (
                     <option key={status} value={status}>
                       {status === 'all' ? 'All Status' : status}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-              </div>
-              <div className="relative">
-                <Filter className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-                <select
-                  value={filterImporter}
-                  onChange={(e) => setFilterImporter(e.target.value)}
-                  className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 appearance-none ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                >
-                  {importers.map((importer) => (
-                    <option key={importer} value={importer}>
-                      {importer === 'all' ? 'All Importers' : importer}
                     </option>
                   ))}
                 </select>
@@ -483,6 +850,7 @@ const ExporterShipments = () => {
                   setFilterStatus('all');
                   setFilterImporter('all');
                   setFilterType('all');
+                  setFilterCompany('all');
                 }}
                 className={`px-4 py-2.5 rounded-lg border transition-all duration-200 ${
                   isDark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -492,6 +860,50 @@ const ExporterShipments = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Sort Controls */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Sort by:</span>
+          <button
+            onClick={() => handleSort('company')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'company' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <Building className="w-3 h-3" />
+            Company
+            {sortBy === 'company' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <button
+            onClick={() => handleSort('status')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'status' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <CheckCircle className="w-3 h-3" />
+            Status
+            {sortBy === 'status' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <button
+            onClick={() => handleSort('type')}
+            className={`text-xs px-3 py-1 rounded-full transition-all duration-200 flex items-center gap-1 ${
+              sortBy === 'type' 
+                ? (isDark ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-900') 
+                : (isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
+            }`}
+          >
+            <Ship className="w-3 h-3" />
+            Type
+            {sortBy === 'type' && (sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+          </button>
+          <span className={`ml-auto text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {sortedShipments.length} shipments
+          </span>
         </div>
 
         {/* View Toggle */}
@@ -524,374 +936,127 @@ const ExporterShipments = () => {
           </div>
         </div>
 
-        {/* Shipments List/Grid */}
-        {viewMode === 'list' ? (
-          <div className="space-y-3">
-            {filteredShipments.map((shipment) => {
-              const isExpanded = expandedShipment === shipment.id;
-              const statusStyle = getStatusBadge(shipment.status);
-              const progressColor = getProgressColor(shipment.progress);
-              const StatusIcon = statusStyle.icon;
-
+        {/* Shipments List */}
+        {sortedShipments.length === 0 ? (
+          <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No shipments found</p>
+            <p className="text-sm">Try adjusting your search or filters</p>
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="space-y-4">
+            {companyNames.map(company => renderCompanySection(company))}
+          </div>
+        ) : (
+          // Grid View - Grouped by company
+          <div className="space-y-6">
+            {companyNames.map(company => {
+              const shipments = groupedShipments[company];
               return (
-                <div
-                  key={shipment.id}
-                  className={`rounded-lg transition-all duration-300 ${
-                    isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-                  } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
-                >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(shipment.id)}>
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
-                          <Package className="w-5 h-5" style={{ color: colors.primary }} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 
-                              className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                viewShipmentDetails(shipment.id);
-                              }}
-                            >
-                              {shipment.id}
-                            </h3>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1`} style={{
+                <div key={company}>
+                  <div className={`px-3 py-2 mb-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <div className="flex items-center gap-2">
+                      <Building className="w-4 h-4" style={{ color: colors.primary }} />
+                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {company}
+                      </span>
+                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        ({shipments.length} shipments)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {shipments.map((shipment) => {
+                      const statusStyle = getStatusBadge(shipment.status);
+                      const progressColor = getProgressColor(shipment.progress);
+                      const StatusIcon = statusStyle.icon;
+
+                      return (
+                        <div
+                          key={shipment.id}
+                          className={`rounded-lg p-4 transition-all duration-300 cursor-pointer hover:shadow-lg ${
+                            isDark ? 'bg-gray-800 border border-gray-700 hover:border-gray-600' : 'bg-white shadow-md hover:shadow-xl'
+                          }`}
+                          onClick={() => viewShipmentDetails(shipment.id)}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {shipment.id}
+                              </h3>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <Building className="w-3 h-3 inline mr-1" />
+                                {shipment.importer}
+                              </p>
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1`} style={{
                               backgroundColor: statusStyle.backgroundColor,
                               color: statusStyle.color
                             }}>
                               <StatusIcon className="w-3 h-3" />
                               {shipment.status}
                             </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                              {shipment.type}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs mb-2">
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <Package className="w-3 h-3 inline mr-1" />
+                              {shipment.itemCount} items
                             </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                              <Building className="w-3 h-3 inline mr-1" />
-                              {shipment.importer}
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <Weight className="w-3 h-3 inline mr-1" />
+                              {shipment.weight}
                             </span>
                           </div>
-                          <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {shipment.vessel} • {shipment.destination}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Package className="w-3 h-3 inline mr-1" />
-                          {shipment.itemCount} items
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Weight className="w-3 h-3 inline mr-1" />
-                          {shipment.weight}
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Clock className="w-3 h-3 inline mr-1" />
-                          ETA: {shipment.eta}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Progress
-                          </span>
-                          <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {shipment.progress}%
-                          </span>
-                        </div>
-                        <div className="w-24 md:w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ 
-                              width: `${shipment.progress}%`,
-                              backgroundColor: progressColor
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => viewShipmentDetails(shipment.id)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" style={{ color: colors.primary }} />
-                      </button>
-                      <button
-                        onClick={() => toggleExpand(shipment.id)}
-                        className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                        style={{ color: colors.primary }}
-                      >
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Expanded Content */}
-                  {isExpanded && (
-                    <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Weight</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.weight}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.volume}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Containers</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.containers}</p>
-                        </div>
-                        <div>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Value</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.value}</p>
-                        </div>
-                      </div>
-
-                      {/* Importer Info */}
-                      <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                        <p className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Building className="w-3 h-3 inline mr-1" />
-                          Importer Information
-                        </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Company</p>
-                            <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importer}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Contact</p>
-                            <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerContact}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
-                            <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerEmail}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country</p>
-                            <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{shipment.importerCountry}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Documents Progress */}
-                      <div>
-                        <div className="flex justify-between items-center">
-                          <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <FileText className="w-3 h-3 inline mr-1" />
-                            Documents ({shipment.documentCount}/{shipment.documentsTotal})
-                          </p>
-                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {Math.round((shipment.documentCount / shipment.documentsTotal) * 100)}%
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                          <div 
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ 
-                              width: `${(shipment.documentCount / shipment.documentsTotal) * 100}%`,
-                              backgroundColor: colors.primary
-                            }}
-                          />
-                        </div>
-                        <div className="grid grid-cols-4 gap-1 mt-2">
-                          {shipment.documents.map((doc, idx) => (
-                            <div key={idx} className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {getDocumentStatusIcon(doc.status)}
-                              <span className="truncate">{doc.name}</span>
+                          <div className="mt-2">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Progress</span>
+                              <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {shipment.progress}%
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Items Preview */}
-                      <div>
-                        <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          Items in Shipment ({shipment.items.length} types)
-                        </p>
-                        <div className="space-y-1">
-                          {shipment.items.map((item, idx) => (
-                            <div key={idx} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                              <div className="flex-1">
-                                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  {item.name}
-                                </p>
-                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  HS Code: {item.hsCode || 'N/A'}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  Qty: {item.quantity}
-                                </p>
-                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  {item.weight} • {item.value}
-                                </p>
-                              </div>
+                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${shipment.progress}%`,
+                                  backgroundColor: progressColor
+                                }}
+                              />
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                          </div>
 
-                      {/* Milestones */}
-                      <div>
-                        <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Milestones</p>
-                        <div className="space-y-1">
-                          {shipment.milestones.map((milestone, idx) => (
-                            <div key={idx} className={`flex items-center gap-2 text-sm ${milestone.completed ? 'text-green-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {milestone.completed ? (
-                                <CheckCircle className="w-4 h-4" />
-                              ) : (
-                                <Clock className="w-4 h-4" />
-                              )}
-                              <span>{milestone.stage}</span>
-                              <span className="text-xs">{milestone.date}</span>
+                          <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                            <div className="flex items-center gap-1 text-xs">
+                              <Clock className="w-3 h-3" style={{ color: colors.primary }} />
+                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA: {shipment.eta}</span>
                             </div>
-                          ))}
+                            <div className="flex items-center gap-1 text-xs">
+                              <FileText className="w-3 h-3" style={{ color: colors.primary }} />
+                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                                {shipment.documentCount}/{shipment.documentsTotal}
+                              </span>
+                            </div>
+                            <button
+                              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              style={{ color: colors.primary }}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <button
-                          onClick={() => viewShipmentDetails(shipment.id)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
-                          style={{
-                            backgroundColor: colors.primary,
-                            color: 'white'
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                          View Full Details
-                        </button>
-                        <button
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-                          style={{
-                            backgroundColor: colors.primaryBg,
-                            color: colors.primary
-                          }}
-                        >
-                          <FileText className="w-4 h-4" />
-                          View Documents
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          // Grid View
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredShipments.map((shipment) => {
-              const statusStyle = getStatusBadge(shipment.status);
-              const progressColor = getProgressColor(shipment.progress);
-              const StatusIcon = statusStyle.icon;
-
-              return (
-                <div
-                  key={shipment.id}
-                  className={`rounded-lg p-4 transition-all duration-300 cursor-pointer hover:shadow-lg ${
-                    isDark ? 'bg-gray-800 border border-gray-700 hover:border-gray-600' : 'bg-white shadow-md hover:shadow-xl'
-                  }`}
-                  onClick={() => viewShipmentDetails(shipment.id)}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {shipment.id}
-                      </h3>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <Building className="w-3 h-3 inline mr-1" />
-                        {shipment.importer}
-                      </p>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1`} style={{
-                      backgroundColor: statusStyle.backgroundColor,
-                      color: statusStyle.color
-                    }}>
-                      <StatusIcon className="w-3 h-3" />
-                      {shipment.status}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs mb-2">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                      <Package className="w-3 h-3 inline mr-1" />
-                      {shipment.itemCount} items
-                    </span>
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                      <Weight className="w-3 h-3 inline mr-1" />
-                      {shipment.weight}
-                    </span>
-                  </div>
-
-                  <div className="mt-2">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Progress</span>
-                      <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {shipment.progress}%
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ 
-                          width: `${shipment.progress}%`,
-                          backgroundColor: progressColor
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t flex items-center justify-between" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                    <div className="flex items-center gap-1 text-xs">
-                      <Clock className="w-3 h-3" style={{ color: colors.primary }} />
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA: {shipment.eta}</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs">
-                      <FileText className="w-3 h-3" style={{ color: colors.primary }} />
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                        {shipment.documentCount}/{shipment.documentsTotal}
-                      </span>
-                    </div>
-                    <button
-                      className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      style={{ color: colors.primary }}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })}
-          </div>
-        )}
-
-        {filteredShipments.length === 0 && (
-          <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium">No shipments found</p>
-            <p className="text-sm">Try adjusting your search or filters</p>
           </div>
         )}
       </div>
     </div>
   );
 };
-
-// Grid icon component
-const Grid = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
-  </svg>
-);
 
 export default ExporterShipments;

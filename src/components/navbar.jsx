@@ -42,7 +42,9 @@ import {
   Book,
   Activity,
   Key,
-  HardDrive
+  HardDrive,
+  PackageCheck,
+  BriefcaseBusiness
 } from 'lucide-react';
 import { ThemeContext } from '../context/themeContext';
 import { useNavigate } from 'react-router-dom';
@@ -152,45 +154,48 @@ const Navbar = () => {
   // Navigation Links
   const importerNavLinks = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/importer-dashboard' },
-    { name: 'Shipments', icon: Ship, path: '/importer-shipments' },
-    { name: 'Freight Bookings', icon: Book, path: '/importer/freight-bookings' },
-    { name: 'Assignments', icon: UserPlus, path: '/importer-assignments' },
-    { name: 'Containers', icon: Container, path: '/importer-containers' },
-    { name: 'Documents', icon: FileText, path: '/importer-documents' },
-    { name: 'Fleet', icon: Truck, path: '/importer-fleet' },
+    { name: 'My Imports', icon: Package, path: '/my-imports' },
+    { name: 'Service Providers', icon: BriefcaseBusiness, path: '/importer-serviceproviders' },
+    // { name: 'Freight Bookings', icon: Book, path: '/importer/freight-bookings' },
+    // { name: 'Assignments', icon: UserPlus, path: '/importer-assignments' },
+    // { name: 'Containers', icon: Container, path: '/importer-containers' },
+    // { name: 'Documents', icon: FileText, path: '/importer-documents' },
+    // { name: 'Fleet', icon: Truck, path: '/importer-fleet' },
   ];
 
   const exporterNavLinks = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/exporter-dashboard' },
-    { name: 'Exports', icon: Ship, path: '/exporter-shipments' },
-    { name: 'Containers', icon: Container, path: '/exporter-containers' },
-    { name: 'Documents', icon: FileText, path: '/exporter-documents' },
-    { name: 'Fleet', icon: Truck, path: '/exporter-fleet' },
+    { name: 'Import Orders', icon: Package, path: '/exporter-orders' },
+    // { name: 'Exports', icon: Ship, path: '/exporter-shipments' },
+    // { name: 'Containers', icon: Container, path: '/exporter-containers' },
+    // { name: 'Documents', icon: FileText, path: '/exporter-documents' },
+    // { name: 'Fleet', icon: Truck, path: '/exporter-fleet' },
     { name: 'Freight Bookings', icon: Book, path: '/freight-bookings' },
   ];
 
   const clearingAgentNavLinks = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/clearing-agent-dashboard' },
-    { name: 'Assignments', icon: Ship, path: '/clearing-agent-assignments' },
-    { name: 'Containers', icon: Container, path: '/clearing-agent-containers' },
-    { name: 'Documents', icon: FileText, path: '/clearing-agent-documents' },
+    { name: 'My Requests', icon: Ship, path: '/clearing-agent-requests' },
+    // { name: 'Containers', icon: Container, path: '/clearing-agent-containers' },
+    // { name: 'Documents', icon: FileText, path: '/clearing-agent-documents' },
     { name: 'SLA', icon: Award, path: '/clearing-agent-sla' },
   ];
 
   const freightForwarderNavLinks = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/freight-forwarder/dashboard' },
+    // { name: 'Processed Bookings', icon: PackageCheck, path: '/freight-forwarder/processed-bookings' },
     { name: 'Bookings', icon: Ship, path: '/freight-forwarder/bookings' },
-    { name: 'Containers', icon: Container, path: '/freight-forwarder/containers' },
-    { name: 'Documents', icon: FileText, path: '/freight-forwarder/documents' },
+    // { name: 'Containers', icon: Container, path: '/freight-forwarder/containers' },
+    // { name: 'Documents', icon: FileText, path: '/freight-forwarder/documents' },
     { name: 'Schedule', icon: Calendar, path: '/freight-forwarder/schedule' },
   ];
 
   const inlandTransporterNavLinks = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/inland-transporter/dashboard' },
     { name: 'Dispatch Orders', icon: ClipboardList, path: '/inland-transporter/dispatch-orders' },
-    { name: 'Deliveries', icon: Truck, path: '/inland-transporter/deliveries' },
+    { name: 'Fleet', icon: Truck, path: '/inland-transporter/deliveries' },
     { name: 'Vehicles', icon: Truck, path: '/inland-transporter/vehicles' },
-    { name: 'Documents', icon: FileText, path: '/inland-transporter/documents' },
+    // { name: 'Documents', icon: FileText, path: '/inland-transporter/documents' },
   ];
 
   // Determine which nav links to show
@@ -253,7 +258,7 @@ const Navbar = () => {
   const handleNewImport = () => navigate('/new-import');
   const handleNewExport = () => navigate('/new-export');
   const handleNewAssignment = () => navigate('/clearing-agent/assignment/new');
-  const handleNewBooking = () => navigate('/freight-forwarder/booking/new');
+  const handleNewBooking = () => navigate('/freight-forwarder/booking/process');
   const handleNewDispatch = () => navigate('/inland-transporter/dispatch/new');
   const handleNewUser = () => navigate('/admin/users');
   const handleLogout = () => {
@@ -426,7 +431,7 @@ const Navbar = () => {
                   >
                     <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4" />
                     <span className="hidden xs:inline">New</span>
-                    <span className="hidden sm:inline"> Booking</span>
+                    <span className="hidden sm:inline"> Process Booking</span>
                   </button>
                 )}
                 

@@ -34,6 +34,11 @@ import ImporterFreightBookings from './roles/importer/ImporterFreightBookings';
 import ImporterFreightBookingDetails from './roles/importer/ImporterFreightBookingDetails';
 import ImporterBookingDocuments from './roles/importer/ImporterBookingDocuments';
 import ImporterAssignmentDetails from './roles/importer/ImporterAssignmentDetails';
+import MyImports from './roles/importer/MyImports';
+import ImportDetails from './roles/importer/ImportDetails';
+import PartnersManagement from './roles/importer/PartnersManagement';
+
+
 
 // Role-specific pages - Exporter
 import ExporterDashboard from './roles/exporter/ExporterDashboard';
@@ -49,10 +54,12 @@ import ExporterFreightBookings from './roles/exporter/ExporterFreightBookings';
 import ExporterFreightBookingDetails from './roles/exporter/ExporterFreightBookingDetails';
 import ExporterFreightBookingEdit from './roles/exporter/ExporterFreightBookingEdit';
 import NewExport from './roles/exporter/NewExport';
+import ExporterOrders from './roles/exporter/ExporterOrders';
+import OrderDetails from './roles/exporter/OrderDetails';
 
 // Role-specific pages - Clearing Agent
 import ClearingAgentDashboard from './roles/clearingAgent/ClearingAgentDashboard';
-import ClearingAgentAssignments from './roles/clearingAgent/ClearingAgentAssignments';
+import ClearingAgentRequests from './roles/clearingAgent/ClearingAgentRequests';
 import ClearingAgentAssignmentDetails from './roles/clearingAgent/ClearingAgentAssignmentDetails';
 import ClearingAgentContainers from './roles/clearingAgent/clearingAgentContainers';
 import ClearingAgentDocuments from './roles/clearingAgent/ClearingAgentDocuments';
@@ -64,11 +71,16 @@ import FreightForwarderDashboard from './roles/freightForwarder/FreightForwarder
 import FreightForwarderBookings from './roles/freightForwarder/FreightForwarderBookings';
 import FreightForwarderBookingDetails from './roles/freightForwarder/FreightForwarderBookingDetails';
 import FreightForwarderBookingEdit from './roles/freightForwarder/FreightForwarderBookingEdit';
-import FreightForwarderNewBooking from './roles/freightForwarder/FreightForwarderNewBooking';
+import FreightForwarderProcessBooking from './roles/freightForwarder/FreightForwarderProcessBooking';
 import FreightForwarderContainers from './roles/freightForwarder/FreightForwarderContainers';
 import FreightForwarderDocuments from './roles/freightForwarder/FreightForwarderDocuments';
 import FreightForwarderSchedule from './roles/freightForwarder/FreightForwarderSchedule';
 import FreightForwarderAnalytics from './roles/freightForwarder/FreightForwarderAnalytics';
+import FreightForwarderContainerDetails from './roles/freightForwarder/FreightForwarderContainerDetails';
+import ProcessedBookingsList from './roles/freightForwarder/ProcessedBookingsList';
+import ShipmentTracker from './roles/freightForwarder/ShipmentTracker';
+import BookingDetails from './roles/freightForwarder/BookingDetails';
+
 
 // Role-specific pages - Inland Transporter
 import InlandTransporterDashboard from './roles/inlandTransporter/InlandTransporterDashboard';
@@ -128,6 +140,10 @@ function App() {
               <Route path="/importer/freight-booking/:id" element={<ImporterFreightBookingDetails />} />
               <Route path="/importer/freight-booking/:id/documents" element={<ImporterBookingDocuments />} />
               <Route path="/importer/assignment/:id" element={<ImporterAssignmentDetails />} />
+              <Route path="/my-imports" element={<MyImports />} />
+              <Route path="/import-details/:id" element={<ImportDetails />} />
+              <Route path="/importer-serviceproviders/" element={<PartnersManagement />} />
+
 
               {/* Exporter Routes */}
               <Route path="/exporter-dashboard" element={<ExporterDashboard />} />
@@ -144,26 +160,35 @@ function App() {
               <Route path="/freight-bookings/:id" element={<ExporterFreightBookingDetails />} />
               <Route path="/freight-booking/edit/:id" element={<ExporterFreightBookingEdit />} />
               <Route path="/new-export" element={<NewExport />} />
+              <Route path="/exporter-orders" element={<ExporterOrders />} />
+              <Route path="/exporter-order-details/:id" element={<OrderDetails />} />
 
               {/* Clearing Agent Routes */}
               <Route path="/clearing-agent-dashboard" element={<ClearingAgentDashboard />} />
-              <Route path="/clearing-agent-assignments" element={<ClearingAgentAssignments />} />
+              <Route path="/clearing-agent-requests" element={<ClearingAgentRequests />} />
               <Route path="/clearing-agent/assignment/:id" element={<ClearingAgentAssignmentDetails />} />
               <Route path="/clearing-agent-containers" element={<ClearingAgentContainers />} />
               <Route path="/clearing-agent-documents" element={<ClearingAgentDocuments />} />
               <Route path="/clearing-agent-documents/:id" element={<ClearingAgentDocumentDetails />} />
               <Route path="/clearing-agent-upload" element={<ClearingAgentUploadDocument />} />
 
-              {/* Freight Forwarder Routes */}
+              {/* Freight Forwarder Routes - FIXED */}
               <Route path="/freight-forwarder/dashboard" element={<FreightForwarderDashboard />} />
               <Route path="/freight-forwarder/bookings" element={<FreightForwarderBookings />} />
               <Route path="/freight-forwarder/booking/:id" element={<FreightForwarderBookingDetails />} />
               <Route path="/freight-forwarder/booking/edit/:id" element={<FreightForwarderBookingEdit />} />
-              <Route path="/freight-forwarder/booking/new" element={<FreightForwarderNewBooking />} />
+              <Route path="/freight-forwarder/booking/process" element={<FreightForwarderProcessBooking />} />
               <Route path="/freight-forwarder/containers" element={<FreightForwarderContainers />} />
               <Route path="/freight-forwarder/documents" element={<FreightForwarderDocuments />} />
               <Route path="/freight-forwarder/schedule" element={<FreightForwarderSchedule />} />
               <Route path="/freight-forwarder/analytics" element={<FreightForwarderAnalytics />} />
+              <Route path="/freight-forwarder/container/:id" element={<FreightForwarderContainerDetails />} />
+              
+              {/* IMPORTANT: These routes need the /freight-forwarder prefix */}
+              <Route path="/freight-forwarder/processed-bookings" element={<ProcessedBookingsList />} />
+              <Route path="/freight-forwarder/track/:trackingId" element={<ShipmentTracker />} />
+              <Route path="/freight-forwarder/processed-bookings/:trackingId" element={<BookingDetails />} />
+              <Route path="/freight-forwarder/process-booking" element={<FreightForwarderProcessBooking />} />
 
               {/* Inland Transporter Routes */}
               <Route path="/inland-transporter/dashboard" element={<InlandTransporterDashboard />} />

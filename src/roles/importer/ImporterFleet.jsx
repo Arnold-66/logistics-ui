@@ -1,3 +1,4 @@
+// roles/importer/ImporterFleet.jsx
 import React, { useState, useContext, useEffect } from 'react';
 import {
   Ship,
@@ -48,21 +49,27 @@ import {
   AlertCircle,
   CheckCircle,
   Clock as ClockIcon,
-  ChevronLeft
+  ChevronLeft,
+  Building
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useAuth } from '../../context/authContext';
 
 const ImporterFleet = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { darkMode } = useContext(ThemeContext);
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCompany, setFilterCompany] = useState('all');
   const [expandedFleet, setExpandedFleet] = useState(null);
   const [selectedFleet, setSelectedFleet] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [fleetData, setFleetData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const colors = {
     primary: '#714b67',
@@ -76,16 +83,18 @@ const ImporterFleet = () => {
     info: '#3b82f6',
   };
 
-  const isDark = darkMode
+  const isDark = darkMode;
+  const userCompany = user?.company || user?.name || '';
 
-  // Fleet data with container items
-  const fleetData = [
+  // All fleet data (mock data with company association)
+  const allFleetData = [
     {
       id: 1,
       name: 'MV Star Express',
       type: 'ship',
       flag: '🇱🇷',
       country: 'Liberia',
+      company: 'ImportFlow Ltd',
       status: 'active',
       location: 'Indian Ocean',
       coordinates: { lat: -2.5, lng: 48.5 },
@@ -152,6 +161,7 @@ const ImporterFleet = () => {
       type: 'ship',
       flag: '🇵🇦',
       country: 'Panama',
+      company: 'TechImport Ltd',
       status: 'active',
       location: 'Pacific Ocean',
       coordinates: { lat: 8.5, lng: 58.5 },
@@ -207,6 +217,7 @@ const ImporterFleet = () => {
       type: 'ship',
       flag: '🇮🇳',
       country: 'India',
+      company: 'ImportFlow Ltd',
       status: 'port',
       location: 'Mombasa Port - Customs Bond',
       coordinates: { lat: -4.05, lng: 39.67 },
@@ -262,6 +273,7 @@ const ImporterFleet = () => {
       type: 'ship',
       flag: '🇿🇦',
       country: 'South Africa',
+      company: 'Global Traders Ltd',
       status: 'completed',
       location: 'Nairobi Warehouse',
       coordinates: { lat: -1.29, lng: 36.82 },
@@ -308,6 +320,7 @@ const ImporterFleet = () => {
       type: 'truck',
       flag: '🇺🇬',
       country: 'Uganda',
+      company: 'ImportFlow Ltd',
       status: 'transit',
       location: 'Kampala - Mombasa Road',
       coordinates: { lat: 0.5, lng: 35.5 },
@@ -343,8 +356,116 @@ const ImporterFleet = () => {
         { point: 'Tororo, Uganda', date: '15 Aug 2026', completed: false },
         { point: 'Port of Mombasa', date: '15 Aug 2026', completed: false }
       ]
+    },
+    {
+      id: 6,
+      name: 'Truck Fleet - Unit 78',
+      type: 'truck',
+      flag: '🇺🇬',
+      country: 'Uganda',
+      company: 'ImportFlow Ltd',
+      status: 'active',
+      location: 'Jinja, Uganda',
+      coordinates: { lat: 0.43, lng: 33.2 },
+      speed: '45 km/h',
+      heading: '180°',
+      destination: 'Kampala Warehouse',
+      eta: '16 Aug 2026 12:00',
+      capacity: '20 tons',
+      containers: [
+        { 
+          id: 'TR-782342', 
+          status: 'In Transit', 
+          destination: 'Kampala, Uganda', 
+          items: 80,
+          contents: [
+            { name: 'Electronics', quantity: 80, weight: '2.5 tons' }
+          ]
+        }
+      ],
+      driver: 'Sarah Nambi',
+      truckNumber: 'UG-2024-0790',
+      lastUpdate: '2 hours ago',
+      nextPort: 'Kampala Warehouse',
+      distanceRemaining: '80 km',
+      fuel: '78%',
+      temperature: '26°C',
+      statusIcon: '🚛',
+      color: colors.info,
+      amenities: ['AC', 'GPS', 'Comms'],
+      route: [
+        { point: 'Jinja, Uganda', date: '15 Aug 2026', completed: true },
+        { point: 'Kampala, Uganda', date: '16 Aug 2026', completed: false }
+      ]
+    },
+    {
+      id: 7,
+      name: 'MV Ocean Princess',
+      type: 'ship',
+      flag: '🇲🇭',
+      country: 'Marshall Islands',
+      company: 'ImportFlow Ltd',
+      status: 'active',
+      location: 'Arabian Sea',
+      coordinates: { lat: 12.5, lng: 58.5 },
+      speed: '16 knots',
+      heading: '270°',
+      destination: 'Port of Mombasa',
+      eta: '25 Aug 2026 08:00',
+      capacity: '400 TEU',
+      containers: [
+        { 
+          id: 'MSKU-458924', 
+          status: 'In Transit', 
+          destination: 'Port of Mombasa', 
+          items: 580,
+          contents: [
+            { name: 'Medical Equipment', quantity: 580, weight: '8.2 tons' },
+            { name: 'Lab Supplies', quantity: 230, weight: '0.8 tons' }
+          ]
+        }
+      ],
+      crew: 22,
+      captain: 'Captain Lisa Chen',
+      voyage: 'OP-2026-112',
+      lastUpdate: '6 hours ago',
+      nextPort: 'Port of Mombasa',
+      distanceRemaining: '890 nautical miles',
+      fuel: '65%',
+      temperature: '29°C',
+      windSpeed: '10 knots',
+      waveHeight: '1.8m',
+      statusIcon: '🚢',
+      color: colors.primary,
+      amenities: ['WiFi', 'Mess Hall', 'Gym', 'Swimming Pool'],
+      route: [
+        { point: 'Shanghai, China', date: '10 Aug 2026', completed: true },
+        { point: 'Singapore', date: '15 Aug 2026', completed: true },
+        { point: 'Arabian Sea', date: '20 Aug 2026', completed: true },
+        { point: 'Port of Mombasa', date: '25 Aug 2026', completed: false }
+      ]
     }
   ];
+
+  useEffect(() => {
+    setLoading(true);
+    setTimeout(() => {
+      // Filter fleet items to only show those belonging to the logged-in user's company
+      let filtered = allFleetData;
+      
+      if (userCompany) {
+        filtered = allFleetData.filter(
+          item => item.company.toLowerCase() === userCompany.toLowerCase()
+        );
+      }
+      
+      setFleetData(filtered);
+      setLoading(false);
+    }, 500);
+  }, [userCompany]);
+
+  // Get unique companies from filtered data
+  const uniqueCompanies = [...new Set(fleetData.map(item => item.company).filter(Boolean))];
 
   // Check if we're viewing a specific fleet item
   useEffect(() => {
@@ -353,12 +474,12 @@ const ImporterFleet = () => {
       if (item) {
         setSelectedFleet(item);
       } else {
-        navigate('/fleet');
+        navigate('/importer-fleet');
       }
     } else {
       setSelectedFleet(null);
     }
-  }, [id, navigate]);
+  }, [id, fleetData, navigate]);
 
   // Get status badge style
   const getStatusBadge = (status) => {
@@ -385,11 +506,17 @@ const ImporterFleet = () => {
   const filteredFleet = fleetData.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.destination.toLowerCase().includes(searchQuery.toLowerCase());
+                          item.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.company.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = filterType === 'all' || item.type === filterType;
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
-    return matchesSearch && matchesType && matchesStatus;
+    const matchesCompany = filterCompany === 'all' || item.company === filterCompany;
+    return matchesSearch && matchesType && matchesStatus && matchesCompany;
   });
+
+  // Separate fleet by type
+  const seaFleet = filteredFleet.filter(item => item.type === 'ship');
+  const roadFleet = filteredFleet.filter(item => item.type === 'truck');
 
   // Toggle expansion
   const toggleExpand = (id) => {
@@ -402,12 +529,12 @@ const ImporterFleet = () => {
 
   // Navigate to fleet details
   const viewFleetDetails = (id) => {
-    navigate(`/fleet/${id}`);
+    navigate(`/importer-fleet/${id}`);
   };
 
   // Navigate to container details
   const viewContainerDetails = (containerId) => {
-    navigate(`/container/${containerId}`);
+    navigate(`/importer-container/${containerId}`);
   };
 
   // Get flag emoji
@@ -433,6 +560,149 @@ const ImporterFleet = () => {
     );
   };
 
+  // Render Fleet Section
+  const renderFleetSection = (title, icon, fleetItems, type) => {
+    if (fleetItems.length === 0) return null;
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 mb-2">
+          {icon}
+          <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {title} ({fleetItems.length})
+          </h2>
+        </div>
+        {fleetItems.map((item) => {
+          const isExpanded = expandedFleet === item.id;
+          const statusStyle = getStatusBadge(item.status);
+
+          return (
+            <div
+              key={item.id}
+              className={`rounded-lg transition-all duration-300 ${
+                isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+              } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(item.id)}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                      {getTypeIcon(item.type)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 
+                          className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            viewFleetDetails(item.id);
+                          }}
+                        >
+                          {item.name}
+                        </h3>
+                        <span className="text-lg">{getFlagEmoji(item.flag)}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
+                          {statusStyle.label}
+                        </span>
+                      </div>
+                      <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {item.company} • {item.country} • {item.location} • {item.speed}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
+                    <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <MapPin className="w-3 h-3 inline mr-1" />
+                      {item.destination}
+                    </span>
+                    <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <Package className="w-3 h-3 inline mr-1" />
+                      {item.containers.length} containers
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => viewFleetDetails(item.id)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    title="View Details"
+                  >
+                    <Eye className="w-4 h-4" style={{ color: colors.primary }} />
+                  </button>
+                  <button
+                    onClick={() => toggleExpand(item.id)}
+                    className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                    style={{ color: colors.primary }}
+                  >
+                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Expanded Content */}
+              {isExpanded && (
+                <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Speed</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.speed}</p>
+                    </div>
+                    <div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ETA</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.eta}</p>
+                    </div>
+                    <div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacity</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.capacity}</p>
+                    </div>
+                    <div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Containers</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.containers.length}</p>
+                    </div>
+                  </div>
+
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4" style={{ color: colors.primary }} />
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Current Location</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.location}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Navigation className="w-4 h-4" style={{ color: colors.primary }} />
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Destination</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.destination}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <button
+                      onClick={() => viewFleetDetails(item.id)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                      style={{
+                        backgroundColor: colors.primary,
+                        color: 'white'
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Full Details
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   // Fleet Details Page
   const FleetDetails = ({ item }) => {
     if (!item) return null;
@@ -442,10 +712,9 @@ const ImporterFleet = () => {
 
     return (
       <div className="space-y-6">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm">
           <button
-            onClick={() => navigate('/fleet')}
+            onClick={() => navigate('/importer-fleet')}
             className={`flex items-center gap-1 hover:underline ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
           >
             <ArrowLeft className="w-4 h-4" />
@@ -453,7 +722,6 @@ const ImporterFleet = () => {
           </button>
         </div>
 
-        {/* Header */}
         <div className={`rounded-lg p-6 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'}`}>
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="flex items-start gap-4">
@@ -471,25 +739,13 @@ const ImporterFleet = () => {
                   </span>
                 </div>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {item.country} • {isShip ? 'Vessel' : 'Truck'} • {item.capacity}
+                  {item.company} • {item.country} • {isShip ? 'Vessel' : 'Truck'} • {item.capacity}
                 </p>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => navigate('/fleet')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
-                }`}
-              >
-                <X className="w-4 h-4" />
-                Close
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className={`rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'}`}>
           <div className="flex border-b overflow-x-auto" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
             <button
@@ -531,10 +787,8 @@ const ImporterFleet = () => {
           </div>
 
           <div className="p-6">
-            {/* Overview Tab - Same as before */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
-                {/* Live Tracker */}
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -579,7 +833,6 @@ const ImporterFleet = () => {
                   </div>
                 </div>
 
-                {/* Stats Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Speed</p>
@@ -599,14 +852,19 @@ const ImporterFleet = () => {
                   </div>
                 </div>
 
-                {/* Details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                    <h4 className={`text-sm font-medium mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Vessel Details</h4>
+                    <h4 className={`text-sm font-medium mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {isShip ? 'Vessel Details' : 'Truck Details'}
+                    </h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Name</span>
                         <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Company</span>
+                        <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.company}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Flag</span>
@@ -648,10 +906,6 @@ const ImporterFleet = () => {
                           </div>
                         </>
                       )}
-                      <div className="flex justify-between">
-                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Last Update</span>
-                        <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.lastUpdate}</span>
-                      </div>
                     </div>
                   </div>
 
@@ -671,36 +925,8 @@ const ImporterFleet = () => {
                         <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.distanceRemaining}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Next Port</span>
-                        <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.nextPort}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Temperature</span>
-                        <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.temperature}</span>
-                      </div>
-                      {isShip && (
-                        <>
-                          <div className="flex justify-between">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Wind Speed</span>
-                            <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.windSpeed}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Wave Height</span>
-                            <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.waveHeight}</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Amenities */}
-                    <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? '#4b5563' : '#e5e7eb' }}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Amenities</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {item.amenities.map((amenity, idx) => (
-                          <span key={idx} className={`text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
-                            {amenity}
-                          </span>
-                        ))}
+                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Last Update</span>
+                        <span className={isDark ? 'text-white' : 'text-gray-900'}>{item.lastUpdate}</span>
                       </div>
                     </div>
                   </div>
@@ -708,7 +934,6 @@ const ImporterFleet = () => {
               </div>
             )}
 
-            {/* Containers Tab with expandable details */}
             {activeTab === 'containers' && (
               <div className="space-y-4">
                 {item.containers.map((container, idx) => {
@@ -754,7 +979,6 @@ const ImporterFleet = () => {
                         </div>
                       </div>
                       
-                      {/* Expanded container contents */}
                       {expanded && (
                         <div className="mt-3 pt-3 border-t" style={{ borderColor: isDark ? '#4b5563' : '#e5e7eb' }}>
                           <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -769,7 +993,6 @@ const ImporterFleet = () => {
               </div>
             )}
 
-            {/* Route Tab */}
             {activeTab === 'route' && (
               <div className="space-y-4">
                 {item.route.map((point, idx) => (
@@ -802,12 +1025,46 @@ const ImporterFleet = () => {
     );
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: colors.primary }}></div>
+          <p className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading your fleet...</p>
+        </div>
+      </div>
+    );
+  }
+
   // If viewing a specific fleet item
   if (selectedFleet) {
     return (
       <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
         <div className="max-w-7xl mx-auto">
           <FleetDetails item={selectedFleet} />
+        </div>
+      </div>
+    );
+  }
+
+  // No fleet found
+  if (fleetData.length === 0) {
+    return (
+      <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-16">
+            <Ship className="w-20 h-20 mx-auto mb-4 opacity-30" style={{ color: colors.primary }} />
+            <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              No Fleet Found
+            </h2>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              You don't have any fleet items associated with your account yet.
+            </p>
+            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Company: {userCompany || 'Not specified'}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -821,10 +1078,10 @@ const ImporterFleet = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Fleet Management
+              My Fleet
             </h1>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Track and manage your entire fleet
+              {userCompany} • Track and manage your entire fleet
             </p>
           </div>
           <div className="flex gap-2">
@@ -854,28 +1111,28 @@ const ImporterFleet = () => {
           <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white shadow-sm'}`}>
             <div className="flex items-center gap-2">
               <Ship className="w-4 h-4" style={{ color: colors.success }} />
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Active</span>
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Sea Fleet</span>
             </div>
             <p className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {fleetData.filter(f => f.status === 'active' || f.status === 'transit').length}
+              {fleetData.filter(f => f.type === 'ship').length}
             </p>
           </div>
           <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white shadow-sm'}`}>
             <div className="flex items-center gap-2">
-              <Anchor className="w-4 h-4" style={{ color: colors.warning }} />
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>In Port</span>
+              <Truck className="w-4 h-4" style={{ color: colors.warning }} />
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Road Fleet</span>
             </div>
             <p className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {fleetData.filter(f => f.status === 'port').length}
+              {fleetData.filter(f => f.type === 'truck').length}
             </p>
           </div>
           <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white shadow-sm'}`}>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4" style={{ color: colors.success }} />
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Completed</span>
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Active</span>
             </div>
             <p className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {fleetData.filter(f => f.status === 'completed').length}
+              {fleetData.filter(f => f.status === 'active' || f.status === 'transit').length}
             </p>
           </div>
         </div>
@@ -899,6 +1156,24 @@ const ImporterFleet = () => {
               />
             </div>
             <div className="flex gap-2 flex-wrap">
+              {uniqueCompanies.length > 1 && (
+                <div className="relative">
+                  <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                  <select
+                    value={filterCompany}
+                    onChange={(e) => setFilterCompany(e.target.value)}
+                    className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 appearance-none min-w-[150px] ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  >
+                    <option value="all">All Companies</option>
+                    {uniqueCompanies.map((company) => (
+                      <option key={company} value={company}>{company}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                </div>
+              )}
               <div className="relative">
                 <Filter className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
                 <select
@@ -936,6 +1211,7 @@ const ImporterFleet = () => {
                   setSearchQuery('');
                   setFilterType('all');
                   setFilterStatus('all');
+                  setFilterCompany('all');
                 }}
                 className={`px-4 py-2.5 rounded-lg border transition-all duration-200 ${
                   isDark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -947,147 +1223,26 @@ const ImporterFleet = () => {
           </div>
         </div>
 
-        {/* Fleet List */}
-        <div className="space-y-3">
-          {filteredFleet.map((item) => {
-            const isExpanded = expandedFleet === item.id;
-            const statusStyle = getStatusBadge(item.status);
+        {/* Fleet by Type - Sea Fleet */}
+        {seaFleet.length > 0 && renderFleetSection('Sea Fleet', <Ship className="w-5 h-5" style={{ color: colors.primary }} />, seaFleet, 'ship')}
 
-            return (
-              <div
-                key={item.id}
-                className={`rounded-lg transition-all duration-300 ${
-                  isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-                } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(item.id)}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                        {getTypeIcon(item.type)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 
-                            className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              viewFleetDetails(item.id);
-                            }}
-                          >
-                            {item.name}
-                          </h3>
-                          <span className="text-lg">{getFlagEmoji(item.flag)}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
-                            {statusStyle.label}
-                          </span>
-                        </div>
-                        <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {item.country} • {item.location} • {item.speed}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
-                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <MapPin className="w-3 h-3 inline mr-1" />
-                        {item.destination}
-                      </span>
-                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <Package className="w-3 h-3 inline mr-1" />
-                        {item.containers.length} containers
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => viewFleetDetails(item.id)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      title="View Details"
-                    >
-                      <Eye className="w-4 h-4" style={{ color: colors.primary }} />
-                    </button>
-                    <button
-                      onClick={() => toggleExpand(item.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                      style={{ color: colors.primary }}
-                    >
-                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
+        {/* Fleet by Type - Road Fleet */}
+        {roadFleet.length > 0 && (
+          <div className="mt-6">
+            {renderFleetSection('Road Fleet', <Truck className="w-5 h-5" style={{ color: colors.primary }} />, roadFleet, 'truck')}
+          </div>
+        )}
 
-                {/* Expanded Content */}
-                {isExpanded && (
-                  <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Speed</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.speed}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ETA</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.eta}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacity</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.capacity}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Containers</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.containers.length}</p>
-                      </div>
-                    </div>
-
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" style={{ color: colors.primary }} />
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Current Location</p>
-                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.location}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Navigation className="w-4 h-4" style={{ color: colors.primary }} />
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Destination</p>
-                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.destination}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <button
-                        onClick={() => viewFleetDetails(item.id)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
-                        style={{
-                          backgroundColor: colors.primary,
-                          color: 'white'
-                        }}
-                      >
-                        <Eye className="w-4 h-4" />
-                        View Full Details
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {filteredFleet.length === 0 && (
-            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              <Ship className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No fleet found</p>
-              <p className="text-sm">Try adjusting your search or filters</p>
-            </div>
-          )}
-        </div>
+        {filteredFleet.length === 0 && (
+          <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Ship className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No fleet found</p>
+            <p className="text-sm">Try adjusting your search or filters</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default  ImporterFleet;
+export default ImporterFleet;

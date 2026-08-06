@@ -277,7 +277,7 @@ const ImporterDocuments = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
+            {/* <button
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-lg"
               style={{
                 backgroundColor: colors.primary,
@@ -287,7 +287,7 @@ const ImporterDocuments = () => {
             >
               <Plus className="w-4 h-4" />
               New Document
-            </button>
+            </button> */}
           </div>
         </div>
 

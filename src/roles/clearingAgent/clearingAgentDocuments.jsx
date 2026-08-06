@@ -1,3 +1,4 @@
+// ClearingAgentDocuments.jsx - Updated with importer grouping and filtering
 import React, { useState, useContext, useEffect } from 'react';
 import {
   FileText,
@@ -40,7 +41,9 @@ import {
   Info,
   RefreshCw,
   Send,
-  ExternalLink
+  ExternalLink,
+  List,
+  Grid
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
@@ -54,13 +57,17 @@ const ClearingAgentDocuments = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
+  const [filterImporter, setFilterImporter] = useState('all');
   const [expandedDoc, setExpandedDoc] = useState(null);
+  const [expandedGroup, setExpandedGroup] = useState({});
   const [requestModal, setRequestModal] = useState(null);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [requestMessage, setRequestMessage] = useState('');
   const [uploadModal, setUploadModal] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadComment, setUploadComment] = useState('');
+  const [viewMode, setViewMode] = useState('list');
+  const [groupBy, setGroupBy] = useState('importer');
 
   const colors = {
     primary: '#714b67',
@@ -77,7 +84,7 @@ const ClearingAgentDocuments = () => {
     cyan: '#06b6d4'
   };
 
-  const isDark = darkMode
+  const isDark = darkMode;
 
   // Document categories for clearing agent
   const documentCategories = [
@@ -89,7 +96,7 @@ const ClearingAgentDocuments = () => {
     { id: 'certificate_docs', label: 'Certificates', icon: FileCheck },
   ];
 
-  // Document data for clearing agent
+  // Document data for clearing agent with importer information
   const documentsData = [
     {
       id: 1,
@@ -103,6 +110,9 @@ const ClearingAgentDocuments = () => {
       size: '2.4 MB',
       uploadedBy: 'John Doe (Importer)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'INV-2026-00458',
       expiryDate: '2026-12-31',
       priority: 'high',
@@ -123,6 +133,9 @@ const ClearingAgentDocuments = () => {
       size: '1.8 MB',
       uploadedBy: 'Jane Smith (Importer)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'Jane Smith',
+      importerEmail: 'jane@importflow.com',
       documentNumber: 'SC-2026-00458',
       expiryDate: '2026-12-31',
       priority: 'high',
@@ -143,6 +156,9 @@ const ClearingAgentDocuments = () => {
       size: '3.2 MB',
       uploadedBy: 'MV Star Express',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'BOL-2026-00458',
       expiryDate: null,
       priority: 'critical',
@@ -163,6 +179,9 @@ const ClearingAgentDocuments = () => {
       size: '1.5 MB',
       uploadedBy: 'MV Star Express',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'PL-2026-00458',
       expiryDate: null,
       priority: 'high',
@@ -183,6 +202,9 @@ const ClearingAgentDocuments = () => {
       size: '0.8 MB',
       uploadedBy: 'You (Clearing Agent)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'C18-2026-00458',
       expiryDate: null,
       priority: 'critical',
@@ -203,6 +225,9 @@ const ClearingAgentDocuments = () => {
       size: '1.2 MB',
       uploadedBy: 'Jane Smith (Importer)',
       shipmentId: 'SHIP-459',
+      importer: 'TechImport Ltd',
+      importerContact: 'Jane Smith',
+      importerEmail: 'jane@techimport.com',
       documentNumber: 'COC-2026-00459',
       expiryDate: '2027-07-25',
       priority: 'high',
@@ -223,6 +248,9 @@ const ClearingAgentDocuments = () => {
       size: '0.9 MB',
       uploadedBy: 'John Doe (Importer)',
       shipmentId: 'SHIP-459',
+      importer: 'TechImport Ltd',
+      importerContact: 'Jane Smith',
+      importerEmail: 'jane@techimport.com',
       documentNumber: 'PVoC-2026-00459',
       expiryDate: '2026-10-28',
       priority: 'high',
@@ -243,6 +271,9 @@ const ClearingAgentDocuments = () => {
       size: '4.2 MB',
       uploadedBy: 'MV Star Express',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'FI-2026-00458',
       expiryDate: null,
       priority: 'high',
@@ -263,6 +294,9 @@ const ClearingAgentDocuments = () => {
       size: '3.1 MB',
       uploadedBy: 'John Doe (Importer)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'POP-2026-00458',
       expiryDate: null,
       priority: 'high',
@@ -283,6 +317,9 @@ const ClearingAgentDocuments = () => {
       size: '0.5 MB',
       uploadedBy: 'You (Clearing Agent)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'CSR-2026-00458',
       expiryDate: null,
       priority: 'medium',
@@ -303,6 +340,9 @@ const ClearingAgentDocuments = () => {
       size: '0.5 MB',
       uploadedBy: 'John Doe (Importer)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'IRD-2026-00458',
       expiryDate: null,
       priority: 'medium',
@@ -323,6 +363,9 @@ const ClearingAgentDocuments = () => {
       size: '0.8 MB',
       uploadedBy: 'Jane Smith (Importer)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'Jane Smith',
+      importerEmail: 'jane@importflow.com',
       documentNumber: 'IIL-2026-00458',
       expiryDate: null,
       priority: 'high',
@@ -343,6 +386,9 @@ const ClearingAgentDocuments = () => {
       size: '1.1 MB',
       uploadedBy: 'Port Authority',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'VAN-2026-00458',
       expiryDate: null,
       priority: 'critical',
@@ -363,6 +409,9 @@ const ClearingAgentDocuments = () => {
       size: '0.3 MB',
       uploadedBy: 'You (Clearing Agent)',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'TAF-2026-00458',
       expiryDate: null,
       priority: 'critical',
@@ -383,6 +432,9 @@ const ClearingAgentDocuments = () => {
       size: '0.7 MB',
       uploadedBy: 'MV Star Express',
       shipmentId: 'SHIP-458',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
       documentNumber: 'DO-2026-00458',
       expiryDate: null,
       priority: 'high',
@@ -390,8 +442,34 @@ const ClearingAgentDocuments = () => {
       fileType: 'pdf',
       requiredBy: 'Importer',
       actions: ['request', 'view']
+    },
+    {
+      id: 16,
+      name: 'Certificate of Origin',
+      description: 'Certificate of origin for the goods',
+      type: 'certificate',
+      category: 'certificate_docs',
+      source: 'importer',
+      status: 'pending',
+      date: '2026-08-04',
+      size: '0.6 MB',
+      uploadedBy: 'Grace Akello (Importer)',
+      shipmentId: 'SHIP-460',
+      importer: 'Global Traders Ltd',
+      importerContact: 'Grace Akello',
+      importerEmail: 'grace@globaltraders.com',
+      documentNumber: 'CO-2026-00460',
+      expiryDate: '2027-08-04',
+      priority: 'high',
+      tags: ['origin', 'certificate', 'export'],
+      fileType: 'pdf',
+      requiredBy: 'URC',
+      actions: ['request', 'view']
     }
   ];
+
+  // Get unique importers for filter
+  const uniqueImporters = [...new Set(documentsData.map(d => d.importer))];
 
   // Get document source badge
   const getSourceBadge = (source) => {
@@ -476,6 +554,13 @@ const ClearingAgentDocuments = () => {
     }
   };
 
+  const toggleGroupExpand = (groupName) => {
+    setExpandedGroup(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+
   const viewDocument = (doc) => {
     navigate(`/clearing-agent-documents/${doc.id}`);
   };
@@ -514,16 +599,42 @@ const ClearingAgentDocuments = () => {
     }
   };
 
+  // Filter documents
   const filteredDocuments = documentsData.filter(doc => {
     const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           doc.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           doc.shipmentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          doc.documentNumber.toLowerCase().includes(searchQuery.toLowerCase());
+                          doc.documentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          doc.importer.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || doc.status === filterStatus;
     const matchesCategory = filterCategory === 'all' || doc.category === filterCategory;
     const matchesSource = filterSource === 'all' || doc.source === filterSource;
-    return matchesSearch && matchesStatus && matchesCategory && matchesSource;
+    const matchesImporter = filterImporter === 'all' || doc.importer === filterImporter;
+    return matchesSearch && matchesStatus && matchesCategory && matchesSource && matchesImporter;
   });
+
+  // Group documents by importer
+  const groupedDocuments = filteredDocuments.reduce((groups, doc) => {
+    const key = doc.importer;
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(doc);
+    return groups;
+  }, {});
+
+  // Sort groups alphabetically
+  const sortedGroupKeys = Object.keys(groupedDocuments).sort();
+
+  // Get group status summary
+  const getGroupStatusSummary = (groupDocs) => {
+    const total = groupDocs.length;
+    const received = groupDocs.filter(d => d.status === 'received').length;
+    const pending = groupDocs.filter(d => d.status === 'pending').length;
+    const inProgress = groupDocs.filter(d => d.status === 'in_progress' || d.status === 'draft').length;
+    const critical = groupDocs.filter(d => d.priority === 'critical').length;
+    return { total, received, pending, inProgress, critical };
+  };
 
   // Stats
   const totalDocs = documentsData.length;
@@ -560,7 +671,7 @@ const ClearingAgentDocuments = () => {
             <div className={`p-3 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
               <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{requestModal.name}</p>
               <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Shipment: {requestModal.shipmentId} • Required by: {requestModal.requiredBy}
+                Importer: {requestModal.importer} • Shipment: {requestModal.shipmentId}
               </p>
             </div>
 
@@ -640,7 +751,7 @@ const ClearingAgentDocuments = () => {
             <div className={`p-3 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
               <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{uploadModal.name}</p>
               <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Shipment: {uploadModal.shipmentId}
+                Importer: {uploadModal.importer} • Shipment: {uploadModal.shipmentId}
               </p>
             </div>
 
@@ -905,7 +1016,7 @@ const ClearingAgentDocuments = () => {
               <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
               <input
                 type="text"
-                placeholder="Search documents by name, description, or shipment..."
+                placeholder="Search documents by name, description, shipment, or importer..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`w-full pl-10 pr-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 ${
@@ -949,12 +1060,29 @@ const ClearingAgentDocuments = () => {
                 </select>
                 <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
               </div>
+              <div className="relative">
+                <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                <select
+                  value={filterImporter}
+                  onChange={(e) => setFilterImporter(e.target.value)}
+                  className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 appearance-none min-w-[150px] ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                >
+                  <option value="all">All Importers</option>
+                  {uniqueImporters.map((importer) => (
+                    <option key={importer} value={importer}>{importer}</option>
+                  ))}
+                </select>
+                <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+              </div>
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setFilterStatus('all');
                   setFilterCategory('all');
                   setFilterSource('all');
+                  setFilterImporter('all');
                 }}
                 className={`px-4 py-2.5 rounded-lg border transition-all duration-200 ${
                   isDark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -966,221 +1094,483 @@ const ClearingAgentDocuments = () => {
           </div>
         </div>
 
-        {/* Documents List */}
-        <div className="space-y-3">
-          {filteredDocuments.map((doc) => {
-            const isExpanded = expandedDoc === doc.id;
-            const statusStyle = getStatusBadge(doc.status);
-            const sourceStyle = getSourceBadge(doc.source);
-            const priorityStyle = getPriorityBadge(doc.priority);
-            const SourceIcon = sourceStyle.icon;
+        {/* Group By Toggle */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Showing {filteredDocuments.length} documents
+              {filterImporter !== 'all' && ` for ${filterImporter}`}
+            </p>
+            {filterImporter === 'all' && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setGroupBy('importer')}
+                  className={`px-2 py-1 rounded text-xs transition-all duration-200 ${
+                    groupBy === 'importer'
+                      ? 'text-white'
+                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  style={{ backgroundColor: groupBy === 'importer' ? colors.primary : 'transparent' }}
+                >
+                  Group by Importer
+                </button>
+              </div>
+            )}
+          </div>
+          <div className={`flex rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-hidden`}>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 text-sm transition-all duration-200 flex items-center gap-1 ${
+                viewMode === 'list' 
+                  ? 'text-white' 
+                  : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+              style={{ backgroundColor: viewMode === 'list' ? colors.primary : 'transparent' }}
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-2 text-sm transition-all duration-200 flex items-center gap-1 ${
+                viewMode === 'grid' 
+                  ? 'text-white' 
+                  : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+              style={{ backgroundColor: viewMode === 'grid' ? colors.primary : 'transparent' }}
+            >
+              <Grid className="w-4 h-4" />
+              <span className="hidden sm:inline">Grid</span>
+            </button>
+          </div>
+        </div>
 
-            return (
-              <div
-                key={doc.id}
-                className={`rounded-lg transition-all duration-300 border-l-4 ${
-                  isDark ? 'bg-gray-800 border-gray-700' : 'bg-white shadow-md'
-                } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
-                style={{ borderLeftColor: priorityStyle.color }}
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(doc.id)}>
-                    <div className="flex items-center gap-3">
+        {/* Grouped Documents List */}
+        {viewMode === 'list' && filterImporter === 'all' && groupBy === 'importer' ? (
+          <div className="space-y-4">
+            {sortedGroupKeys.map((groupName) => {
+              const groupDocs = groupedDocuments[groupName];
+              const summary = getGroupStatusSummary(groupDocs);
+              const isGroupExpanded = expandedGroup[groupName] !== false;
+
+              return (
+                <div key={groupName} className={`rounded-lg overflow-hidden ${
+                  isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+                }`}>
+                  {/* Group Header */}
+                  <div
+                    className={`p-4 cursor-pointer flex items-center justify-between hover:bg-opacity-50 transition-colors ${
+                      isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => toggleGroupExpand(groupName)}
+                  >
+                    <div className="flex items-center gap-4 flex-1">
                       <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
-                        {getDocumentIcon(doc.type)}
+                        <Building className="w-5 h-5" style={{ color: colors.primary }} />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 
-                            className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              viewDocument(doc);
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {groupName}
+                          </h3>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                            {summary.total} documents
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs">
+                          <span className="text-green-600 dark:text-green-400">
+                            Received: {summary.received}
+                          </span>
+                          <span className="text-yellow-600 dark:text-yellow-400">
+                            Pending: {summary.pending}
+                          </span>
+                          <span className="text-blue-600 dark:text-blue-400">
+                            In Progress: {summary.inProgress}
+                          </span>
+                          {summary.critical > 0 && (
+                            <span className="text-red-500">
+                              Critical: {summary.critical}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                        {groupDocs.filter(d => d.status !== 'received').length} pending
+                      </span>
+                      {isGroupExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </div>
+                  </div>
+
+                  {/* Group Content */}
+                  {isGroupExpanded && (
+                    <div className={`p-4 border-t space-y-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                      {groupDocs.map((doc) => {
+                        const isExpanded = expandedDoc === doc.id;
+                        const statusStyle = getStatusBadge(doc.status);
+                        const sourceStyle = getSourceBadge(doc.source);
+                        const priorityStyle = getPriorityBadge(doc.priority);
+                        const SourceIcon = sourceStyle.icon;
+
+                        return (
+                          <div
+                            key={doc.id}
+                            className={`rounded-lg transition-all duration-300 border-l-4 ${
+                              isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+                            } ${isExpanded ? 'p-4' : 'p-3'}`}
+                            style={{ borderLeftColor: priorityStyle.color }}
+                          >
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                              <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(doc.id)}>
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                                    {getDocumentIcon(doc.type)}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 
+                                        className={`font-semibold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          viewDocument(doc);
+                                        }}
+                                      >
+                                        {doc.name}
+                                      </h4>
+                                      <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
+                                        backgroundColor: statusStyle.backgroundColor,
+                                        color: statusStyle.color
+                                      }}>
+                                        {statusStyle.icon}
+                                        {statusStyle.label}
+                                      </span>
+                                      <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
+                                        backgroundColor: sourceStyle.backgroundColor,
+                                        color: sourceStyle.color
+                                      }}>
+                                        <SourceIcon className="w-3 h-3" />
+                                        {sourceStyle.label}
+                                      </span>
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                                        {doc.shipmentId}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {doc.description}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {renderActions(doc)}
+                                <button
+                                  onClick={() => toggleExpand(doc.id)}
+                                  className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                                  style={{ color: colors.primary }}
+                                >
+                                  {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="mt-3 pt-3 border-t space-y-3" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Contact</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.importerContact}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.importerEmail}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.size}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Required By</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.requiredBy}</p>
+                                  </div>
+                                </div>
+
+                                {/* Tags */}
+                                <div>
+                                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tags</p>
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {doc.tags.map((tag, idx) => (
+                                      <span key={idx} className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                                        #{tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Quick Actions */}
+                                <div className="flex flex-wrap gap-2 pt-2">
+                                  <button
+                                    onClick={() => viewDocument(doc)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                                    style={{
+                                      backgroundColor: colors.primary,
+                                      color: 'white'
+                                    }}
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    View Document
+                                  </button>
+                                  {(doc.status === 'pending' || doc.status === 'draft') && doc.source !== 'clearing_agent' && (
+                                    <button
+                                      onClick={() => handleRequestDocument(doc)}
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                                      style={{
+                                        backgroundColor: colors.warning + '20',
+                                        color: colors.warning
+                                      }}
+                                    >
+                                      <Send className="w-4 h-4" />
+                                      Request Document
+                                    </button>
+                                  )}
+                                  {(doc.actions.includes('edit') || doc.actions.includes('upload')) && (
+                                    <button
+                                      onClick={() => handleUploadDocument(doc)}
+                                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                                      style={{
+                                        backgroundColor: colors.primaryBg,
+                                        color: colors.primary
+                                      }}
+                                    >
+                                      <Upload className="w-4 h-4" />
+                                      {doc.status === 'draft' ? 'Edit' : 'Upload'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // Regular List View
+          <div className="space-y-3">
+            {filteredDocuments.map((doc) => {
+              const isExpanded = expandedDoc === doc.id;
+              const statusStyle = getStatusBadge(doc.status);
+              const sourceStyle = getSourceBadge(doc.source);
+              const priorityStyle = getPriorityBadge(doc.priority);
+              const SourceIcon = sourceStyle.icon;
+
+              return (
+                <div
+                  key={doc.id}
+                  className={`rounded-lg transition-all duration-300 border-l-4 ${
+                    isDark ? 'bg-gray-800 border-gray-700' : 'bg-white shadow-md'
+                  } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
+                  style={{ borderLeftColor: priorityStyle.color }}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(doc.id)}>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                          {getDocumentIcon(doc.type)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 
+                              className={`font-bold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                viewDocument(doc);
+                              }}
+                            >
+                              {doc.name}
+                            </h3>
+                            <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
+                              backgroundColor: statusStyle.backgroundColor,
+                              color: statusStyle.color
+                            }}>
+                              {statusStyle.icon}
+                              {statusStyle.label}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
+                              backgroundColor: sourceStyle.backgroundColor,
+                              color: sourceStyle.color
+                            }}>
+                              <SourceIcon className="w-3 h-3" />
+                              {sourceStyle.label}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                              backgroundColor: priorityStyle.backgroundColor,
+                              color: priorityStyle.color
+                            }}>
+                              {priorityStyle.label}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                              {doc.shipmentId}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <Building className="w-3 h-3 inline mr-1" />
+                              {doc.importer}
+                            </span>
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              <FileText className="w-3 h-3 inline mr-1" />
+                              {doc.documentNumber}
+                            </span>
+                          </div>
+                          <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {doc.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {renderActions(doc)}
+                      <button
+                        onClick={() => toggleExpand(doc.id)}
+                        className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                        style={{ color: colors.primary }}
+                      >
+                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Document Number</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.documentNumber}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.size}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Uploaded By</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.uploadedBy}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Required By</p>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.requiredBy}</p>
+                        </div>
+                      </div>
+
+                      <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4" style={{ color: colors.primary }} />
+                            <div>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Upload Date</p>
+                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {new Date(doc.date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" style={{ color: colors.primary }} />
+                            <div>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expiry Date</p>
+                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                }) : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <button
+                          onClick={() => viewDocument(doc)}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                          style={{
+                            backgroundColor: colors.primary,
+                            color: 'white'
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                          View Document
+                        </button>
+                        {(doc.status === 'pending' || doc.status === 'draft') && doc.source !== 'clearing_agent' && (
+                          <button
+                            onClick={() => handleRequestDocument(doc)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                            style={{
+                              backgroundColor: colors.warning + '20',
+                              color: colors.warning
                             }}
                           >
-                            {doc.name}
-                          </h3>
-                          <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
-                            backgroundColor: statusStyle.backgroundColor,
-                            color: statusStyle.color
-                          }}>
-                            {statusStyle.icon}
-                            {statusStyle.label}
-                          </span>
-                          <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{
-                            backgroundColor: sourceStyle.backgroundColor,
-                            color: sourceStyle.color
-                          }}>
-                            <SourceIcon className="w-3 h-3" />
-                            {sourceStyle.label}
-                          </span>
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                            backgroundColor: priorityStyle.backgroundColor,
-                            color: priorityStyle.color
-                          }}>
-                            {priorityStyle.label}
-                          </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                            {doc.shipmentId}
+                            <Send className="w-4 h-4" />
+                            Request Document
+                          </button>
+                        )}
+                        {(doc.actions.includes('edit') || doc.actions.includes('upload')) && (
+                          <button
+                            onClick={() => handleUploadDocument(doc)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                            style={{
+                              backgroundColor: colors.primaryBg,
+                              color: colors.primary
+                            }}
+                          >
+                            <Upload className="w-4 h-4" />
+                            {doc.status === 'draft' ? 'Edit' : 'Upload'}
+                          </button>
+                        )}
+                        <button
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            isDark ? 'hover:bg-gray-600 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          <Download className="w-4 h-4" />
+                          Download
+                        </button>
+                      </div>
+
+                      <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                        <div className="flex items-center gap-2">
+                          <Info className="w-4 h-4" style={{ color: colors.primary }} />
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {doc.source === 'importer' && 'This document needs to be obtained from the importer. Use the "Request Document" button to request it.'}
+                            {doc.source === 'shipping_line' && 'This document needs to be obtained from the shipping line. Use the "Request Document" button to request it.'}
+                            {doc.source === 'clearing_agent' && 'This document is created by you as the clearing agent. Use the "Upload/Edit" button to manage it.'}
                           </span>
                         </div>
-                        <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {doc.description}
-                        </p>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    {renderActions(doc)}
-                    <button
-                      onClick={() => toggleExpand(doc.id)}
-                      className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                      style={{ color: colors.primary }}
-                    >
-                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </button>
-                  </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        )}
 
-                {isExpanded && (
-                  <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Document Number</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.documentNumber}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.size}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Uploaded By</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.uploadedBy}</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Required By</p>
-                        <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.requiredBy}</p>
-                      </div>
-                    </div>
-
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" style={{ color: colors.primary }} />
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Upload Date</p>
-                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {new Date(doc.date).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric' 
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4" style={{ color: colors.primary }} />
-                          <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expiry Date</p>
-                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric' 
-                              }) : 'N/A'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tags</p>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {doc.tags.map((tag, idx) => (
-                          <span key={idx} className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <button
-                        onClick={() => viewDocument(doc)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
-                        style={{
-                          backgroundColor: colors.primary,
-                          color: 'white'
-                        }}
-                      >
-                        <Eye className="w-4 h-4" />
-                        View Document
-                      </button>
-                      {(doc.status === 'pending' || doc.status === 'draft') && doc.source !== 'clearing_agent' && (
-                        <button
-                          onClick={() => handleRequestDocument(doc)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-                          style={{
-                            backgroundColor: colors.warning + '20',
-                            color: colors.warning
-                          }}
-                        >
-                          <Send className="w-4 h-4" />
-                          Request Document
-                        </button>
-                      )}
-                      {(doc.actions.includes('edit') || doc.actions.includes('upload')) && (
-                        <button
-                          onClick={() => handleUploadDocument(doc)}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-                          style={{
-                            backgroundColor: colors.primaryBg,
-                            color: colors.primary
-                          }}
-                        >
-                          <Upload className="w-4 h-4" />
-                          {doc.status === 'draft' ? 'Edit' : 'Upload'}
-                        </button>
-                      )}
-                      <button
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                          isDark ? 'hover:bg-gray-600 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        <Download className="w-4 h-4" />
-                        Download
-                      </button>
-                    </div>
-
-                    {/* Document Source Info */}
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                      <div className="flex items-center gap-2">
-                        <Info className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {doc.source === 'importer' && 'This document needs to be obtained from the importer. Use the "Request Document" button to request it.'}
-                          {doc.source === 'shipping_line' && 'This document needs to be obtained from the shipping line. Use the "Request Document" button to request it.'}
-                          {doc.source === 'clearing_agent' && 'This document is created by you as the clearing agent. Use the "Upload/Edit" button to manage it.'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {filteredDocuments.length === 0 && (
-            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              <FolderOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No documents found</p>
-              <p className="text-sm">Try adjusting your search or filters</p>
-            </div>
-          )}
-        </div>
+        {filteredDocuments.length === 0 && (
+          <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <FolderOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No documents found</p>
+            <p className="text-sm">Try adjusting your search or filters</p>
+          </div>
+        )}
       </div>
     </div>
   );

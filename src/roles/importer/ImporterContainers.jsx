@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+// roles/importer/ImporterContainers.jsx
+import React, { useState, useContext, useEffect } from 'react';
 import {
   Container,
   Package,
@@ -46,19 +47,33 @@ import {
   RotateCw,
   Layers,
   Grid,
-  List
+  List,
+  User,
+  Users,
+  Briefcase,
+  Building
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
+import { useAuth } from '../../context/authContext';
 import { useNavigate } from 'react-router-dom';
 
 const ImporterContainers = () => {
   const navigate = useNavigate();
   const { darkMode } = useContext(ThemeContext);
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterVessel, setFilterVessel] = useState('all');
+  const [filterImporter, setFilterImporter] = useState('all');
   const [expandedContainer, setExpandedContainer] = useState(null);
+  const [expandedGroup, setExpandedGroup] = useState({});
   const [viewMode, setViewMode] = useState('list');
+  const [selectedContainer, setSelectedContainer] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const [groupBy, setGroupBy] = useState('importer');
+  const [containersData, setContainersData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const colors = {
     primary: '#714b67',
@@ -72,12 +87,27 @@ const ImporterContainers = () => {
     info: '#3b82f6',
   };
 
-  const isDark = darkMode
+  const isDark = darkMode;
 
-  // All containers data
-  const containersData = [
+  // Get the logged-in user's company name
+  const userCompany = user?.company || user?.name || '';
+
+  // Available clearing agents
+  const clearingAgents = [
+    { id: 1, name: 'Swift Clearance Services', email: 'info@swiftclearance.co.ke', phone: '+254 712 345 678' },
+    { id: 2, name: 'Mombasa Port Logistics', email: 'operations@mombasalogistics.com', phone: '+254 723 456 789' },
+    { id: 3, name: 'East Africa Customs Solutions', email: 'support@eacustoms.co.ke', phone: '+254 734 567 890' },
+    { id: 4, name: 'TransGlobal Clearing', email: 'info@transglobal.com', phone: '+254 745 678 901' },
+  ];
+
+  // All containers data (mock data)
+  const allContainersData = [
     {
       id: 'MSKU-458921',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
+      importerPhone: '+256 712 345 678',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -93,6 +123,7 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0789',
       progress: 70,
       color: colors.primary,
+      assignedAgent: null,
       contents: [
         { name: 'Electronics Components', quantity: 450, weight: '2.5 tons' },
         { name: 'Circuit Boards', quantity: 1200, weight: '1.8 tons' },
@@ -101,6 +132,10 @@ const ImporterContainers = () => {
     },
     {
       id: 'MSKU-458922',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'Mary Atim',
+      importerEmail: 'mary@importflow.com',
+      importerPhone: '+256 777 890 123',
       status: 'Loaded',
       type: 'Standard 40ft',
       destination: 'Port of Mombasa',
@@ -116,6 +151,7 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0790',
       progress: 70,
       color: colors.primary,
+      assignedAgent: { id: 1, name: 'Swift Clearance Services' },
       contents: [
         { name: 'Textile Fabrics', quantity: 320, weight: '4.5 tons' },
         { name: 'Dyeing Agents', quantity: 150, weight: '0.5 tons' }
@@ -123,6 +159,10 @@ const ImporterContainers = () => {
     },
     {
       id: 'MSKU-458923',
+      importer: 'TechImport Ltd',
+      importerContact: 'Jane Smith',
+      importerEmail: 'jane@techimport.com',
+      importerPhone: '+254 722 345 678',
       status: 'In Transit',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -138,12 +178,17 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0791',
       progress: 65,
       color: colors.info,
+      assignedAgent: null,
       contents: [
         { name: 'Industrial Parts', quantity: 280, weight: '3.2 tons' }
       ]
     },
     {
       id: 'IN-782341',
+      importer: 'TechImport Ltd',
+      importerContact: 'Peter Mwangi',
+      importerEmail: 'peter@techimport.com',
+      importerPhone: '+254 733 456 789',
       status: 'Unloading',
       type: 'Standard 20ft',
       destination: 'Kampala, Uganda',
@@ -159,6 +204,7 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0792',
       progress: 45,
       color: colors.warning,
+      assignedAgent: { id: 3, name: 'East Africa Customs Solutions' },
       contents: [
         { name: 'Electronics Components', quantity: 280, weight: '2.5 tons' },
         { name: 'Circuit Boards', quantity: 800, weight: '1.2 tons' }
@@ -166,6 +212,10 @@ const ImporterContainers = () => {
     },
     {
       id: 'IN-782342',
+      importer: 'Global Traders Ltd',
+      importerContact: 'David Mbeki',
+      importerEmail: 'david@globaltraders.com',
+      importerPhone: '+254 744 567 890',
       status: 'Customs Hold',
       type: 'Standard 20ft',
       destination: 'Kampala, Uganda',
@@ -181,12 +231,17 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0793',
       progress: 30,
       color: colors.danger,
+      assignedAgent: null,
       contents: [
         { name: 'Industrial Machinery', quantity: 150, weight: '4.5 tons' }
       ]
     },
     {
       id: 'SA-456732',
+      importer: 'Global Traders Ltd',
+      importerContact: 'Sarah Ochieng',
+      importerEmail: 'sarah@globaltraders.com',
+      importerPhone: '+254 755 678 901',
       status: 'Delivered',
       type: 'Standard 40ft',
       destination: 'Nairobi, Kenya',
@@ -202,6 +257,7 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0794',
       progress: 100,
       color: colors.success,
+      assignedAgent: { id: 2, name: 'Mombasa Port Logistics' },
       contents: [
         { name: 'Industrial Machinery', quantity: 120, weight: '10.8 tons' },
         { name: 'Spare Parts', quantity: 450, weight: '2.3 tons' }
@@ -209,6 +265,10 @@ const ImporterContainers = () => {
     },
     {
       id: 'JP-893421',
+      importer: 'East African Traders',
+      importerContact: 'Grace Akello',
+      importerEmail: 'grace@eastafricantraders.com',
+      importerPhone: '+256 766 789 012',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -224,12 +284,17 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0795',
       progress: 25,
       color: colors.primary,
+      assignedAgent: null,
       contents: [
         { name: 'Electronics Components', quantity: 150, weight: '1.2 tons' }
       ]
     },
     {
       id: 'JP-893422',
+      importer: 'East African Traders',
+      importerContact: 'Peter Mwangi',
+      importerEmail: 'peter@eastafricantraders.com',
+      importerPhone: '+254 777 890 123',
       status: 'Loaded',
       type: 'Standard 20ft',
       destination: 'Port of Mombasa',
@@ -245,6 +310,7 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0796',
       progress: 25,
       color: colors.primary,
+      assignedAgent: null,
       contents: [
         { name: 'Consumer Goods', quantity: 200, weight: '2.8 tons' },
         { name: 'Packaging Materials', quantity: 500, weight: '1.5 tons' }
@@ -252,6 +318,10 @@ const ImporterContainers = () => {
     },
     {
       id: 'TR-782341',
+      importer: 'Mombasa Traders Ltd',
+      importerContact: 'James Ochieng',
+      importerEmail: 'james@mombasatraders.com',
+      importerPhone: '+254 788 901 234',
       status: 'In Transit',
       type: 'Truck Container',
       destination: 'Port of Mombasa',
@@ -267,11 +337,89 @@ const ImporterContainers = () => {
       sealNumber: 'SEAL-2026-0797',
       progress: 40,
       color: colors.info,
+      assignedAgent: null,
       contents: [
         { name: 'Fresh Produce', quantity: 120, weight: '4.5 tons' }
       ]
+    },
+    // Additional containers for ImportFlow Ltd (the logged-in user's company)
+    {
+      id: 'MSKU-458924',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'John Doe',
+      importerEmail: 'john@importflow.com',
+      importerPhone: '+256 712 345 678',
+      status: 'In Transit',
+      type: 'Standard 40ft HC',
+      destination: 'Port of Mombasa',
+      vessel: 'MV Ocean Princess',
+      voyage: 'OP-2026-112',
+      location: 'Arabian Sea',
+      coordinates: { lat: 12.5, lng: 58.5 },
+      eta: '25 Aug 2026 08:00',
+      lastUpdate: '6 hours ago',
+      weight: '8.2 tons',
+      capacity: '30.2 tons',
+      items: 580,
+      sealNumber: 'SEAL-2026-0798',
+      progress: 55,
+      color: colors.primary,
+      assignedAgent: null,
+      contents: [
+        { name: 'Medical Equipment', quantity: 580, weight: '8.2 tons' },
+        { name: 'Lab Supplies', quantity: 230, weight: '0.8 tons' }
+      ]
+    },
+    {
+      id: 'MSKU-458925',
+      importer: 'ImportFlow Ltd',
+      importerContact: 'Mary Atim',
+      importerEmail: 'mary@importflow.com',
+      importerPhone: '+256 777 890 123',
+      status: 'Customs Hold',
+      type: 'Standard 20ft',
+      destination: 'Kampala, Uganda',
+      vessel: 'MV Star Express',
+      voyage: 'SE-2026-078',
+      location: 'Mombasa Port - Customs',
+      coordinates: { lat: -4.05, lng: 39.65 },
+      eta: '15 Aug 2026 10:00',
+      lastUpdate: '2 hours ago',
+      weight: '3.8 tons',
+      capacity: '28.2 tons',
+      items: 210,
+      sealNumber: 'SEAL-2026-0799',
+      progress: 35,
+      color: colors.danger,
+      assignedAgent: null,
+      contents: [
+        { name: 'Furniture', quantity: 210, weight: '3.8 tons' },
+        { name: 'Home Decor', quantity: 340, weight: '1.2 tons' }
+      ]
     }
   ];
+
+  useEffect(() => {
+    // Simulate loading
+    setLoading(true);
+    setTimeout(() => {
+      // Filter containers to only show those belonging to the logged-in user's company
+      let filtered = allContainersData;
+      
+      // If user has a company, filter by it
+      if (userCompany) {
+        filtered = allContainersData.filter(
+          container => container.importer.toLowerCase() === userCompany.toLowerCase()
+        );
+      }
+      
+      setContainersData(filtered);
+      setLoading(false);
+    }, 500);
+  }, [userCompany]);
+
+  // Get unique importers for filter (only from the user's containers)
+  const uniqueImporters = [...new Set(containersData.map(c => c.importer))];
 
   // Get unique vessels for filter
   const vessels = ['all', ...new Set(containersData.map(c => c.vessel))];
@@ -281,11 +429,26 @@ const ImporterContainers = () => {
   const filteredContainers = containersData.filter(container => {
     const matchesSearch = container.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           container.destination.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          container.vessel.toLowerCase().includes(searchQuery.toLowerCase());
+                          container.vessel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          container.importer.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = filterStatus === 'all' || container.status === filterStatus;
     const matchesVessel = filterVessel === 'all' || container.vessel === filterVessel;
-    return matchesSearch && matchesStatus && matchesVessel;
+    const matchesImporter = filterImporter === 'all' || container.importer === filterImporter;
+    return matchesSearch && matchesStatus && matchesVessel && matchesImporter;
   });
+
+  // Group containers by importer
+  const groupedContainers = filteredContainers.reduce((groups, container) => {
+    const key = container.importer;
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(container);
+    return groups;
+  }, {});
+
+  // Sort groups alphabetically
+  const sortedGroupKeys = Object.keys(groupedContainers).sort();
 
   // Get status badge style
   const getStatusBadge = (status) => {
@@ -316,9 +479,51 @@ const ImporterContainers = () => {
     }
   };
 
+  const toggleGroupExpand = (groupName) => {
+    setExpandedGroup(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+
   // Navigate to container details
   const viewContainerDetails = (id) => {
     navigate(`/importer-containers/${id}`);
+  };
+
+  // Handle assign agent
+  const handleAssignAgent = (containerId) => {
+    const container = containersData.find(c => c.id === containerId);
+    setSelectedContainer(container);
+    setSelectedAgent('');
+    setShowAssignModal(true);
+  };
+
+  const confirmAssignAgent = () => {
+    if (selectedContainer && selectedAgent) {
+      const agent = clearingAgents.find(a => a.id === parseInt(selectedAgent));
+      const updatedContainers = containersData.map(c => {
+        if (c.id === selectedContainer.id) {
+          return { ...c, assignedAgent: agent };
+        }
+        return c;
+      });
+      setContainersData(updatedContainers);
+      setShowAssignModal(false);
+      setSelectedContainer(null);
+      setSelectedAgent('');
+      alert(`Container ${selectedContainer.id} assigned to ${agent.name}`);
+    }
+  };
+
+  // Get group status summary
+  const getGroupStatusSummary = (groupContainers) => {
+    const total = groupContainers.length;
+    const loaded = groupContainers.filter(c => c.status === 'Loaded').length;
+    const inTransit = groupContainers.filter(c => c.status === 'In Transit').length;
+    const unloading = groupContainers.filter(c => c.status === 'Unloading' || c.status === 'Customs Hold').length;
+    const delivered = groupContainers.filter(c => c.status === 'Delivered').length;
+    return { total, loaded, inTransit, unloading, delivered };
   };
 
   // Stats
@@ -327,31 +532,152 @@ const ImporterContainers = () => {
   const inPort = containersData.filter(c => c.status === 'Unloading' || c.status === 'Customs Hold').length;
   const delivered = containersData.filter(c => c.status === 'Delivered').length;
 
+  // Assign Agent Modal
+  const AssignAgentModal = () => {
+    if (!showAssignModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className={`relative w-full max-w-md rounded-xl shadow-2xl overflow-hidden ${
+          isDark ? 'bg-gray-800' : 'bg-white'
+        }`}>
+          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className="flex items-center gap-3">
+              <Users className="w-5 h-5" style={{ color: colors.primary }} />
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Assign Clearing Agent
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowAssignModal(false)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6">
+            <div className={`p-3 rounded-lg mb-4 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+              <div className="flex items-center gap-3">
+                <Container className="w-5 h-5" style={{ color: colors.primary }} />
+                <div>
+                  <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedContainer?.id}
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {selectedContainer?.importer} • {selectedContainer?.destination}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Select Clearing Agent
+              </label>
+              <select
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 ${
+                  isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+              >
+                <option value="">Choose an agent...</option>
+                {clearingAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name} - {agent.phone}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <button
+              onClick={() => setShowAssignModal(false)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmAssignAgent}
+              disabled={!selectedAgent}
+              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <CheckCircle className="w-4 h-4" />
+              Assign Agent
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: colors.primary }}></div>
+          <p className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading your containers...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If no containers found for this importer
+  if (containersData.length === 0) {
+    return (
+      <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-16">
+            <Container className="w-20 h-20 mx-auto mb-4 opacity-30" style={{ color: colors.primary }} />
+            <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              No Containers Found
+            </h2>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              You don't have any containers associated with your account yet.
+            </p>
+            <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Company: {userCompany || 'Not specified'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+      <AssignAgentModal />
+      
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              All Containers
+              My Containers
             </h1>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Track and manage all containers across your fleet
+              Track and manage all your containers • {userCompany}
             </p>
           </div>
           <div className="flex gap-2">
-            <button
+            {/* <button
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-lg"
               style={{
                 backgroundColor: colors.primary,
                 color: 'white'
               }}
-              onClick={() => navigate('/importer-fleet')}
+              onClick={() => navigate('/new-import')}
             >
-              <Ship className="w-4 h-4" />
-              View Fleet
-            </button>
+              <Plus className="w-4 h-4" />
+              New Import
+            </button> */}
           </div>
         </div>
 
@@ -440,11 +766,30 @@ const ImporterContainers = () => {
                 </select>
                 <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
               </div>
+              {uniqueImporters.length > 1 && (
+                <div className="relative">
+                  <Building className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                  <select
+                    value={filterImporter}
+                    onChange={(e) => setFilterImporter(e.target.value)}
+                    className={`pl-10 pr-8 py-2.5 rounded-lg border focus:outline-none focus:ring-2 transition-all duration-200 appearance-none min-w-[150px] ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  >
+                    <option value="all">All Importers</option>
+                    {uniqueImporters.map((importer) => (
+                      <option key={importer} value={importer}>{importer}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+                </div>
+              )}
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setFilterStatus('all');
                   setFilterVessel('all');
+                  setFilterImporter('all');
                 }}
                 className={`px-4 py-2.5 rounded-lg border transition-all duration-200 ${
                   isDark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -456,8 +801,14 @@ const ImporterContainers = () => {
           </div>
         </div>
 
-        {/* View Toggle */}
-        <div className="flex justify-end mb-4">
+        {/* Results info */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Showing {filteredContainers.length} containers
+              {filterImporter !== 'all' && ` for ${filterImporter}`}
+            </p>
+          </div>
           <div className={`flex rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-hidden`}>
             <button
               onClick={() => setViewMode('list')}
@@ -486,8 +837,219 @@ const ImporterContainers = () => {
           </div>
         </div>
 
-        {/* Containers List/Grid */}
-        {viewMode === 'list' ? (
+        {/* Grouped Containers List */}
+        {viewMode === 'list' && groupedContainers ? (
+          <div className="space-y-4">
+            {sortedGroupKeys.map((groupName) => {
+              const groupContainers = groupedContainers[groupName];
+              const summary = getGroupStatusSummary(groupContainers);
+              const isGroupExpanded = expandedGroup[groupName] !== false;
+
+              return (
+                <div key={groupName} className={`rounded-lg overflow-hidden ${
+                  isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+                }`}>
+                  {/* Group Header */}
+                  <div
+                    className={`p-4 cursor-pointer flex items-center justify-between hover:bg-opacity-50 transition-colors ${
+                      isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => toggleGroupExpand(groupName)}
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg }}>
+                        <Building className="w-5 h-5" style={{ color: colors.primary }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {groupName}
+                          </h3>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                            {summary.total} containers
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs">
+                          <span className="text-green-600 dark:text-green-400">
+                            Loaded: {summary.loaded}
+                          </span>
+                          <span className="text-blue-600 dark:text-blue-400">
+                            In Transit: {summary.inTransit}
+                          </span>
+                          <span className="text-yellow-600 dark:text-yellow-400">
+                            In Port: {summary.unloading}
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            Delivered: {summary.delivered}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                        {groupContainers.filter(c => c.status !== 'Delivered').length} active
+                      </span>
+                      {isGroupExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </div>
+                  </div>
+
+                  {/* Group Content */}
+                  {isGroupExpanded && (
+                    <div className={`p-4 border-t space-y-3 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                      {groupContainers.map((container) => {
+                        const isExpanded = expandedContainer === container.id;
+                        const statusStyle = getStatusBadge(container.status);
+                        const progressColor = getProgressColor(container.progress);
+
+                        return (
+                          <div
+                            key={container.id}
+                            className={`rounded-lg transition-all duration-300 ${
+                              isDark ? 'bg-gray-700 border border-gray-600' : 'bg-gray-50 border border-gray-200'
+                            } ${isExpanded ? 'p-4' : 'p-3'}`}
+                          >
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                              <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(container.id)}>
+                                <div className="flex items-center gap-3">
+                                  <div className="p-1.5 rounded-lg flex-shrink-0" style={{ backgroundColor: colors.primaryBg + '50' }}>
+                                    <Container className="w-4 h-4" style={{ color: colors.primary }} />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 
+                                        className={`font-semibold cursor-pointer hover:underline ${isDark ? 'text-white' : 'text-gray-900'}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          viewContainerDetails(container.id);
+                                        }}
+                                      >
+                                        {container.id}
+                                      </h4>
+                                      <span className="text-xs px-2 py-0.5 rounded-full" style={statusStyle}>
+                                        {container.status}
+                                      </span>
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                                        {container.type}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {container.vessel} • {container.location}
+                                    </p>
+                                    {container.assignedAgent && (
+                                      <p className={`text-xs flex items-center gap-1 mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <Users className="w-3 h-3" style={{ color: colors.primary }} />
+                                        Agent: {container.assignedAgent.name}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                      Progress
+                                    </span>
+                                    <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                      {container.progress}%
+                                    </span>
+                                  </div>
+                                  <div className="w-20 md:w-24 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full rounded-full transition-all duration-500"
+                                      style={{ 
+                                        width: `${container.progress}%`,
+                                        backgroundColor: progressColor
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                {!container.assignedAgent && container.status !== 'Delivered' && (
+                                  <button
+                                    onClick={() => handleAssignAgent(container.id)}
+                                    className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                    title="Assign Agent"
+                                  >
+                                    <Users className="w-4 h-4" style={{ color: colors.primary }} />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => viewContainerDetails(container.id)}
+                                  className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" style={{ color: colors.primary }} />
+                                </button>
+                                <button
+                                  onClick={() => toggleExpand(container.id)}
+                                  className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                >
+                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                              <div className="mt-3 pt-3 border-t space-y-3" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Contact</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.importerContact}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Email</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.importerEmail}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Phone</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.importerPhone}</p>
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Items</p>
+                                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.items}</p>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    Contents ({container.contents.length} types)
+                                  </p>
+                                  <div className="space-y-1">
+                                    {container.contents.map((item, idx) => (
+                                      <div key={idx} className={`flex items-center justify-between p-1.5 rounded ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                                        <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</span>
+                                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                          Qty: {item.quantity} • {item.weight}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => viewContainerDetails(container.id)}
+                                  className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                                  style={{
+                                    backgroundColor: colors.primary,
+                                    color: 'white'
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  View Full Details
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : viewMode === 'list' && !groupedContainers ? (
+          // Fallback if no grouped containers
           <div className="space-y-3">
             {filteredContainers.map((container) => {
               const isExpanded = expandedContainer === container.id;
@@ -501,6 +1063,7 @@ const ImporterContainers = () => {
                     isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
                   } ${isExpanded ? 'p-4 md:p-6' : 'p-3 md:p-4'}`}
                 >
+                  {/* Same as before but without grouping */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="flex-1 cursor-pointer" onClick={() => toggleExpand(container.id)}>
                       <div className="flex items-center gap-3">
@@ -528,44 +1091,26 @@ const ImporterContainers = () => {
                           <p className={`text-xs md:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             {container.vessel} • {container.location}
                           </p>
+                          {container.assignedAgent && (
+                            <p className={`text-xs flex items-center gap-1 mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              <Users className="w-3 h-3" style={{ color: colors.primary }} />
+                              Agent: {container.assignedAgent.name}
+                            </p>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 ml-12 mt-1">
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <MapPin className="w-3 h-3 inline mr-1" />
-                          {container.destination}
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Package className="w-3 h-3 inline mr-1" />
-                          {container.items} items
-                        </span>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <Clock className="w-3 h-3 inline mr-1" />
-                          ETA: {container.eta}
-                        </span>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Progress
-                          </span>
-                          <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {container.progress}%
-                          </span>
-                        </div>
-                        <div className="w-24 md:w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ 
-                              width: `${container.progress}%`,
-                              backgroundColor: progressColor
-                            }}
-                          />
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      {!container.assignedAgent && container.status !== 'Delivered' && (
+                        <button
+                          onClick={() => handleAssignAgent(container.id)}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          title="Assign Clearing Agent"
+                        >
+                          <Users className="w-4 h-4" style={{ color: colors.primary }} />
+                        </button>
+                      )}
                       <button
                         onClick={() => viewContainerDetails(container.id)}
                         className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -605,7 +1150,6 @@ const ImporterContainers = () => {
                         </div>
                       </div>
 
-                      {/* Contents Preview */}
                       <div>
                         <p className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                           Items in Container ({container.contents.length} types)
@@ -634,6 +1178,19 @@ const ImporterContainers = () => {
                           <Eye className="w-4 h-4" />
                           View Full Details
                         </button>
+                        {!container.assignedAgent && container.status !== 'Delivered' && (
+                          <button
+                            onClick={() => handleAssignAgent(container.id)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+                            style={{
+                              backgroundColor: colors.primaryBg,
+                              color: colors.primary
+                            }}
+                          >
+                            <Users className="w-4 h-4" />
+                            Assign Agent
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -666,7 +1223,7 @@ const ImporterContainers = () => {
                           {container.id}
                         </h3>
                         <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {container.vessel}
+                          {container.importer}
                         </p>
                       </div>
                     </div>
@@ -685,6 +1242,13 @@ const ImporterContainers = () => {
                       {container.items}
                     </span>
                   </div>
+
+                  {container.assignedAgent && (
+                    <p className={`text-xs flex items-center gap-1 mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <Users className="w-3 h-3" style={{ color: colors.primary }} />
+                      Agent: {container.assignedAgent.name}
+                    </p>
+                  )}
 
                   <div className="mt-2">
                     <div className="flex justify-between items-center mb-1">
@@ -709,12 +1273,26 @@ const ImporterContainers = () => {
                       <Clock className="w-3 h-3" style={{ color: colors.primary }} />
                       <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA: {container.eta}</span>
                     </div>
-                    <button
-                      className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      style={{ color: colors.primary }}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1">
+                      {!container.assignedAgent && container.status !== 'Delivered' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAssignAgent(container.id);
+                          }}
+                          className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          title="Assign Agent"
+                        >
+                          <Users className="w-4 h-4" style={{ color: colors.primary }} />
+                        </button>
+                      )}
+                      <button
+                        className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        style={{ color: colors.primary }}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
