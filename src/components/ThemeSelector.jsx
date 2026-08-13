@@ -7,8 +7,8 @@ const PRESET_THEMES = [
     id: 'brand-purple',
     name: 'Brand Purple',
     theme: {
-      primary: '#714b67',
-      primaryHover: '#8a5f7e',
+      primary: '#ba0000',
+      primaryHover: '#a70e0e',
       secondary: '#7c3aed',
       accent: '#f59e0b',
     }
