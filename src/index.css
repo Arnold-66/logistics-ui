@@ -113,11 +113,92 @@ code {
 /* index.css */
 @import "tailwindcss";
 
+/* ============================================
+   CSS CUSTOM PROPERTIES - SOURCE OF TRUTH
+   ============================================ */
+:root {
+  /* Brand Theme Colors (Your existing brand colors) */
+  --color-primary: #714b67;
+  --color-primary-hover: #8a5f7e;
+  --color-secondary: #7c3aed;
+  --color-accent: #f59e0b;
+  
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  
+  --color-border: #e2e8f0;
+  
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  
+  /* Dark Mode Overrides (applied via .dark class) */
+  --color-background-dark: #0f172a;
+  --color-surface-dark: #1e293b;
+  --color-surface-hover-dark: #334155;
+  --color-text-dark: #f1f5f9;
+  --color-text-muted-dark: #94a3b8;
+  --color-border-dark: #334155;
+  
+  /* Dark mode brand color overrides */
+  --color-primary-dark: #8a5f7e;
+  --color-primary-hover-dark: #a07a94;
+}
+
+/* ============================================
+   TAILWIND V4 THEME INTEGRATION
+   ============================================ */
+@theme {
+  /* Map CSS custom properties to Tailwind utilities */
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-secondary: var(--color-secondary);
+  --color-accent: var(--color-accent);
+  
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  
+  --color-border: var(--color-border);
+  
+  --color-success: var(--color-success);
+  --color-danger: var(--color-danger);
+  --color-warning: var(--color-warning);
+}
+
+/* ============================================
+   DARK MODE - CSS VARIABLE OVERRIDES
+   ============================================ */
+.dark {
+  --color-background: var(--color-background-dark);
+  --color-surface: var(--color-surface-dark);
+  --color-surface-hover: var(--color-surface-hover-dark);
+  --color-text: var(--color-text-dark);
+  --color-text-muted: var(--color-text-muted-dark);
+  --color-border: var(--color-border-dark);
+  
+  /* Brand colors in dark mode - slightly lighter for better visibility */
+  --color-primary: var(--color-primary-dark);
+  --color-primary-hover: var(--color-primary-hover-dark);
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
 html,
 body,
 #root {
   width: 100%;
   min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-text);
 }
 
 /* Smooth theme transitions */
@@ -168,49 +249,52 @@ body,
   background: #a8a8a8;
 }
 
+/* ============================================
+   LEGACY DARK MODE OVERRIDES (Preserved)
+   ============================================ */
 /* Background colors for dark mode */
 .dark .bg-white {
-  background-color: #1a1a2e !important;
+  background-color: var(--color-surface) !important;
 }
 
 .dark .bg-gray-50 {
-  background-color: #1f1f3a !important;
+  background-color: var(--color-surface-hover) !important;
 }
 
 .dark .bg-gray-100 {
-  background-color: #2a2a4a !important;
+  background-color: var(--color-surface-hover) !important;
 }
 
 .dark .bg-gray-200 {
-  background-color: #3a3a5a !important;
+  background-color: var(--color-border) !important;
 }
 
 .dark .border-gray-200 {
-  border-color: #2a2a4a !important;
+  border-color: var(--color-border) !important;
 }
 
 .dark .border-gray-300 {
-  border-color: #3a3a5a !important;
+  border-color: var(--color-border) !important;
 }
 
 .dark .text-gray-900 {
-  color: #ffffff !important;
+  color: var(--color-text) !important;
 }
 
 .dark .text-gray-700 {
-  color: #d1d1e0 !important;
+  color: var(--color-text) !important;
 }
 
 .dark .text-gray-600 {
-  color: #b0b0c8 !important;
+  color: var(--color-text-muted) !important;
 }
 
 .dark .text-gray-500 {
-  color: #9090a8 !important;
+  color: var(--color-text-muted) !important;
 }
 
 .dark .text-gray-400 {
-  color: #707090 !important;
+  color: var(--color-text-muted) !important;
 }
 
 .dark .shadow-sm {
@@ -233,82 +317,81 @@ body,
 .dark input,
 .dark select,
 .dark textarea {
-  background-color: #2a2a4a !important;
-  border-color: #3a3a5a !important;
-  color: #ffffff !important;
+  background-color: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #707090 !important;
+  color: var(--color-text-muted) !important;
 }
 
 .dark input:focus,
 .dark select:focus,
 .dark textarea:focus {
-  border-color: #714b67 !important;
+  border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 3px rgba(113, 75, 103, 0.3) !important;
 }
 
 /* Hover states */
 .dark .hover\:bg-gray-100:hover {
-  background-color: #2a2a4a !important;
+  background-color: var(--color-surface-hover) !important;
 }
 
 .dark .hover\:bg-gray-50:hover {
-  background-color: #1f1f3a !important;
+  background-color: var(--color-surface-hover) !important;
 }
 
 .dark .hover\:border-gray-600:hover {
-  border-color: #4a4a6a !important;
+  border-color: var(--color-border) !important;
 }
 
 /* Card dark mode overrides */
 .dark .bg-white.shadow-md {
-  background-color: #1a1a2e !important;
-  border-color: #2a2a4a !important;
+  background-color: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
 }
 
 .dark .bg-white.shadow-sm {
-  background-color: #1a1a2e !important;
-  border-color: #2a2a4a !important;
+  background-color: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
 }
 
 /* Modal dark mode */
 .dark .fixed.bg-white {
-  background-color: #1a1a2e !important;
+  background-color: var(--color-surface) !important;
 }
 
 /* Dropdown dark mode */
 .dark .absolute.bg-white {
-  background-color: #1a1a2e !important;
-  border-color: #2a2a4a !important;
+  background-color: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
 }
 
 /* Table dark mode */
 .dark table tbody tr {
-  border-color: #2a2a4a !important;
+  border-color: var(--color-border) !important;
 }
 
 .dark table tbody tr:hover {
-  background-color: #2a2a4a !important;
+  background-color: var(--color-surface-hover) !important;
 }
 
 .dark table thead tr {
-  border-color: #2a2a4a !important;
+  border-color: var(--color-border) !important;
 }
 
 .dark table thead th {
-  color: #9090a8 !important;
+  color: var(--color-text-muted) !important;
 }
 
 /* Button dark mode overrides */
 .dark button.bg-white {
-  background-color: #2a2a4a !important;
-  color: #d1d1e0 !important;
+  background-color: var(--color-surface) !important;
+  color: var(--color-text) !important;
 }
 
 .dark button.bg-gray-50 {
-  background-color: #1f1f3a !important;
+  background-color: var(--color-surface-hover) !important;
 }
-

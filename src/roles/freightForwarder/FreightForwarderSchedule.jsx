@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 const FreightForwarderSchedule = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -35,18 +35,15 @@ const FreightForwarderSchedule = () => {
   });
 
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
-    teal: '#14b8a6',
-    indigo: '#6366f1',
-    orange: '#f97316',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode

@@ -125,15 +125,87 @@ import {
   UserPlus as UserPlusIcon,
   Star as StarIcon,
   StarOff as StarOffIcon,
-  MoreHorizontal as MoreHorizontalIcon
+  MoreHorizontal as MoreHorizontalIcon,
+  AlertTriangle as AlertTriangleIcon2,
+  PlusCircle
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
 import { Link, useNavigate } from 'react-router-dom';
 
+// Toast Component - Updated to use theme
+const Toast = ({ message, type = 'success', onClose, themeColors }) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const toastColors = {
+    success: {
+      bg: themeColors?.success || '#10b981',
+      bgLight: (themeColors?.success || '#10b981') + '20',
+      icon: <CheckCircle className="w-5 h-5" />
+    },
+    error: {
+      bg: themeColors?.danger || '#ef4444',
+      bgLight: (themeColors?.danger || '#ef4444') + '20',
+      icon: <AlertTriangle className="w-5 h-5" />
+    },
+    warning: {
+      bg: themeColors?.accent || '#f59e0b',
+      bgLight: (themeColors?.accent || '#f59e0b') + '20',
+      icon: <AlertCircle className="w-5 h-5" />
+    },
+    info: {
+      bg: themeColors?.secondary || '#3b82f6',
+      bgLight: (themeColors?.secondary || '#3b82f6') + '20',
+      icon: <Info className="w-5 h-5" />
+    }
+  };
+
+  const style = toastColors[type] || toastColors.success;
+
+  return (
+    <div className={`fixed top-4 right-4 z-[9999] transition-all duration-500 transform ${
+      isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+    }`}>
+      <div 
+        className="flex items-center gap-3 px-4 py-3 rounded-lg shadow-2xl max-w-md border"
+        style={{ 
+          backgroundColor: '#ffffff',
+          borderColor: style.bg + '40',
+          borderLeft: `4px solid ${style.bg}`
+        }}
+      >
+        <div className="flex-shrink-0" style={{ color: style.bg }}>
+          {style.icon}
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-900">{message}</p>
+        </div>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+          }}
+          className="flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <X className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const PartnersManagement = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  // Get theme from context
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState('suppliers');
@@ -148,21 +220,56 @@ const PartnersManagement = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteMessage, setInviteMessage] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
 
-  // Color theme
+  // Form state for Add Partner
+  const [formData, setFormData] = useState({
+    companyName: '',
+    businessAddress: '',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    website: '',
+    category: '',
+    licenseNo: '',
+    fleetSize: '',
+    vehicleTypes: '',
+    notes: ''
+  });
+
+  // Form errors
+  const [formErrors, setFormErrors] = useState({});
+
+  // ===== KEY CHANGE: Build colors from theme =====
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
+
+  // Existing categories (would come from API in real app)
+  const [categories, setCategories] = useState([
+    'Electronics',
+    'Textiles',
+    'Machinery',
+    'Packaging',
+    'Automotive',
+    'Chemicals',
+    'Food & Beverage',
+    'Pharmaceuticals',
+    'Construction',
+    'Agriculture'
+  ]);
 
   // Suppliers Data
   const suppliersData = [
@@ -411,6 +518,16 @@ const PartnersManagement = () => {
     { id: 'PKG-011', name: 'Plastic Materials Package', container: 'PK-893421', status: 'Unassigned' },
   ];
 
+  // Toast functions
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
   // Get filtered data based on active tab and search
   const getFilteredData = () => {
     let data = [];
@@ -475,12 +592,90 @@ const PartnersManagement = () => {
     console.log(`Assigning packages ${selectedPackages} to ${selectedPartner.companyName}`);
     setShowAssignModal(false);
     setSelectedPackages([]);
-    alert(`Packages assigned to ${selectedPartner.companyName}`);
+    showToast(`Packages assigned to ${selectedPartner.companyName} successfully!`, 'success');
   };
 
   // Handle add partner
   const handleAddPartner = () => {
+    setFormData({
+      companyName: '',
+      businessAddress: '',
+      contactPerson: '',
+      email: '',
+      phone: '',
+      website: '',
+      category: '',
+      licenseNo: '',
+      fleetSize: '',
+      vehicleTypes: '',
+      notes: ''
+    });
+    setFormErrors({});
+    setShowNewCategoryInput(false);
+    setNewCategory('');
     setShowAddPartnerModal(true);
+  };
+
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+    const requiredFields = ['contactPerson', 'email', 'phone'];
+    
+    // Check required fields
+    requiredFields.forEach(field => {
+      if (!formData[field] || formData[field].trim() === '') {
+        errors[field] = `${field.charAt(0).toUpperCase() + field.slice(1)} is required`;
+      }
+    });
+
+    // Validate email format
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Validate phone (basic check)
+    if (formData.phone && formData.phone.trim().length < 5) {
+      errors.phone = 'Please enter a valid phone number';
+    }
+
+    // Validate category for suppliers
+    if (activeTab === 'suppliers' && !formData.category) {
+      errors.category = 'Category is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle form submit
+  const handleFormSubmit = () => {
+    if (!validateForm()) {
+      showToast('Please fill in all required fields', 'error');
+      return;
+    }
+
+    // Check if category exists, if not add it
+    if (activeTab === 'suppliers' && formData.category && !categories.includes(formData.category)) {
+      setCategories([...categories, formData.category]);
+    }
+
+    setShowAddPartnerModal(false);
+    showToast(`${activeTab === 'suppliers' ? 'Supplier' : activeTab === 'clearingAgents' ? 'Clearing Agent' : 'Inland Transporter'} added successfully!`, 'success');
+  };
+
+  // Handle add category
+  const handleAddCategory = () => {
+    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
+      setCategories([...categories, newCategory.trim()]);
+      setFormData({ ...formData, category: newCategory.trim() });
+      setNewCategory('');
+      setShowNewCategoryInput(false);
+      showToast(`Category "${newCategory.trim()}" added successfully!`, 'success');
+    } else if (categories.includes(newCategory.trim())) {
+      showToast('Category already exists', 'warning');
+      setNewCategory('');
+      setShowNewCategoryInput(false);
+    }
   };
 
   // Handle invite partner
@@ -495,7 +690,7 @@ const PartnersManagement = () => {
   const confirmInvite = () => {
     console.log(`Inviting ${inviteEmail}: ${inviteMessage}`);
     setShowInviteModal(false);
-    alert(`Invitation sent to ${inviteEmail}`);
+    showToast(`Invitation sent to ${inviteEmail}`, 'success');
   };
 
   // Render expanded details
@@ -591,7 +786,7 @@ const PartnersManagement = () => {
                 onClick={() => toggleExpand(item.id)}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90 flex items-center gap-1"
                 style={{ 
-                  backgroundColor: isDark ? '#374151' : '#e5e7eb',
+                  backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
                   color: isDark ? '#9ca3af' : '#6b7280'
                 }}
               >
@@ -863,36 +1058,36 @@ const PartnersManagement = () => {
 
     const fields = activeTab === 'suppliers' 
       ? [
-          { label: 'Company Name', type: 'text', placeholder: 'Enter company name' },
-          { label: 'Business Address', type: 'text', placeholder: 'Enter business address' },
-          { label: 'Contact Person', type: 'text', placeholder: 'Enter contact person name' },
-          { label: 'Email', type: 'email', placeholder: 'Enter email address' },
-          { label: 'Phone', type: 'text', placeholder: 'Enter phone number' },
-          { label: 'Website', type: 'text', placeholder: 'Enter website URL' },
-          { label: 'Category', type: 'text', placeholder: 'Enter category (e.g., Electronics)' },
-          { label: 'Notes', type: 'textarea', placeholder: 'Enter any notes' }
+          { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Enter company name', required: false },
+          { key: 'businessAddress', label: 'Business Address', type: 'text', placeholder: 'Enter business address', required: false },
+          { key: 'contactPerson', label: 'Contact Person *', type: 'text', placeholder: 'Enter contact person name', required: true },
+          { key: 'email', label: 'Email *', type: 'email', placeholder: 'Enter email address', required: true },
+          { key: 'phone', label: 'Phone *', type: 'text', placeholder: 'Enter phone number', required: true },
+          { key: 'website', label: 'Website', type: 'text', placeholder: 'Enter website URL', required: false },
+          { key: 'category', label: 'Category *', type: 'select', placeholder: 'Select or add category', required: true },
+          { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Enter any notes', required: false }
         ]
       : activeTab === 'clearingAgents'
       ? [
-          { label: 'Company Name', type: 'text', placeholder: 'Enter company name' },
-          { label: 'Business Address', type: 'text', placeholder: 'Enter business address' },
-          { label: 'Contact Person', type: 'text', placeholder: 'Enter contact person name' },
-          { label: 'Email', type: 'email', placeholder: 'Enter email address' },
-          { label: 'Phone', type: 'text', placeholder: 'Enter phone number' },
-          { label: 'Website', type: 'text', placeholder: 'Enter website URL' },
-          { label: 'License No.', type: 'text', placeholder: 'Enter license number' },
-          { label: 'Notes', type: 'textarea', placeholder: 'Enter any notes' }
+          { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Enter company name', required: false },
+          { key: 'businessAddress', label: 'Business Address', type: 'text', placeholder: 'Enter business address', required: false },
+          { key: 'contactPerson', label: 'Contact Person *', type: 'text', placeholder: 'Enter contact person name', required: true },
+          { key: 'email', label: 'Email *', type: 'email', placeholder: 'Enter email address', required: true },
+          { key: 'phone', label: 'Phone *', type: 'text', placeholder: 'Enter phone number', required: true },
+          { key: 'website', label: 'Website', type: 'text', placeholder: 'Enter website URL', required: false },
+          { key: 'licenseNo', label: 'License No.', type: 'text', placeholder: 'Enter license number', required: false },
+          { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Enter any notes', required: false }
         ]
       : [
-          { label: 'Company Name', type: 'text', placeholder: 'Enter company name' },
-          { label: 'Business Address', type: 'text', placeholder: 'Enter business address' },
-          { label: 'Contact Person', type: 'text', placeholder: 'Enter contact person name' },
-          { label: 'Email', type: 'email', placeholder: 'Enter email address' },
-          { label: 'Phone', type: 'text', placeholder: 'Enter phone number' },
-          { label: 'Website', type: 'text', placeholder: 'Enter website URL' },
-          { label: 'Fleet Size', type: 'number', placeholder: 'Enter fleet size' },
-          { label: 'Vehicle Types', type: 'text', placeholder: 'e.g., Flatbed, Container Carrier' },
-          { label: 'Notes', type: 'textarea', placeholder: 'Enter any notes' }
+          { key: 'companyName', label: 'Company Name', type: 'text', placeholder: 'Enter company name', required: false },
+          { key: 'businessAddress', label: 'Business Address', type: 'text', placeholder: 'Enter business address', required: false },
+          { key: 'contactPerson', label: 'Contact Person *', type: 'text', placeholder: 'Enter contact person name', required: true },
+          { key: 'email', label: 'Email *', type: 'email', placeholder: 'Enter email address', required: true },
+          { key: 'phone', label: 'Phone *', type: 'text', placeholder: 'Enter phone number', required: true },
+          { key: 'website', label: 'Website', type: 'text', placeholder: 'Enter website URL', required: false },
+          { key: 'fleetSize', label: 'Fleet Size', type: 'number', placeholder: 'Enter fleet size', required: false },
+          { key: 'vehicleTypes', label: 'Vehicle Types', type: 'text', placeholder: 'e.g., Flatbed, Container Carrier', required: false },
+          { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Enter any notes', required: false }
         ];
 
     return (
@@ -920,33 +1115,124 @@ const PartnersManagement = () => {
 
           <div className="p-4 overflow-y-auto max-h-[70vh]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {fields.map((field, idx) => (
-                <div key={idx} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+              {fields.map((field) => (
+                <div key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                   <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                     {field.label}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
                   </label>
                   {field.type === 'textarea' ? (
                     <textarea
+                      value={formData[field.key] || ''}
+                      onChange={(e) => {
+                        setFormData({ ...formData, [field.key]: e.target.value });
+                        if (formErrors[field.key]) {
+                          setFormErrors({ ...formErrors, [field.key]: '' });
+                        }
+                      }}
                       className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      } ${formErrors[field.key] ? 'border-red-500' : ''}`}
                       rows="3"
                       placeholder={field.placeholder}
                       style={{ focusRingColor: colors.primary }}
                     />
+                  ) : field.type === 'select' ? (
+                    <div className="relative">
+                      <select
+                        value={formData.category || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '__add_new__') {
+                            setShowNewCategoryInput(true);
+                          } else {
+                            setFormData({ ...formData, category: value });
+                            if (formErrors.category) {
+                              setFormErrors({ ...formErrors, category: '' });
+                            }
+                          }
+                        }}
+                        className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                          isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                        } ${formErrors.category ? 'border-red-500' : ''}`}
+                        style={{ focusRingColor: colors.primary }}
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        <option value="__add_new__" style={{ color: colors.primary, fontWeight: 'bold' }}>
+                          + Add New Category
+                        </option>
+                      </select>
+                    </div>
                   ) : (
                     <input
                       type={field.type}
+                      value={formData[field.key] || ''}
+                      onChange={(e) => {
+                        setFormData({ ...formData, [field.key]: e.target.value });
+                        if (formErrors[field.key]) {
+                          setFormErrors({ ...formErrors, [field.key]: '' });
+                        }
+                      }}
                       className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
+                      } ${formErrors[field.key] ? 'border-red-500' : ''}`}
                       placeholder={field.placeholder}
                       style={{ focusRingColor: colors.primary }}
                     />
                   )}
+                  {formErrors[field.key] && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors[field.key]}</p>
+                  )}
                 </div>
               ))}
             </div>
+
+            {/* Add New Category Input */}
+            {showNewCategoryInput && (
+              <div className="mt-4 p-4 rounded-lg border-2 border-dashed" style={{ borderColor: colors.primary + '40' }}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    placeholder="Enter new category name..."
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddCategory();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAddCategory}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+                    style={{ backgroundColor: colors.success }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowNewCategoryInput(false);
+                      setNewCategory('');
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    style={{ color: colors.danger }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Press Enter or click Add to save the new category
+                </p>
+              </div>
+            )}
           </div>
 
           <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex gap-2`}>
@@ -959,14 +1245,11 @@ const PartnersManagement = () => {
               Cancel
             </button>
             <button
-              onClick={() => {
-                setShowAddPartnerModal(false);
-                alert(`${activeTab === 'suppliers' ? 'Supplier' : activeTab === 'clearingAgents' ? 'Clearing Agent' : 'Inland Transporter'} added successfully!`);
-              }}
-              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+              onClick={handleFormSubmit}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
               style={{ backgroundColor: colors.primary }}
             >
-              <Plus className="w-4 h-4 inline mr-2" />
+              <Save className="w-4 h-4" />
               Add {activeTab === 'suppliers' ? 'Supplier' : activeTab === 'clearingAgents' ? 'Clearing Agent' : 'Transporter'}
             </button>
           </div>
@@ -1060,6 +1343,17 @@ const PartnersManagement = () => {
 
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
+      {/* Toast Container */}
+      {toasts.map(toast => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => removeToast(toast.id)}
+          themeColors={colors}
+        />
+      ))}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">

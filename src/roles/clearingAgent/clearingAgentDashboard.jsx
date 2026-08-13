@@ -1,5 +1,5 @@
 // roles/clearingagent/ClearingAgentDashboard.jsx
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   Package,
   Ship,
@@ -102,15 +102,23 @@ import {
   ThumbsUp,
   ThumbsDown,
   RefreshCw as RefreshIcon,
-  ExternalLink as ExternalLinkIcon
+  ExternalLink as ExternalLinkIcon,
+  ChevronUp,
+  Plus,
+  Save,
+  X as XIcon,
+  Gauge,
+  Percent,
+  FileSpreadsheet,
+  ShieldCheck
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const ClearingAgentDashboard = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -124,6 +132,31 @@ const ClearingAgentDashboard = () => {
   const [showBillModal, setShowBillModal] = useState(false);
   const [billAmount, setBillAmount] = useState('');
   const [billDescription, setBillDescription] = useState('');
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const [customStatusInput, setCustomStatusInput] = useState('');
+  const [showCustomStatusInput, setShowCustomStatusInput] = useState(false);
+  const [activeTab, setActiveTab] = useState('new');
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressNote, setProgressNote] = useState('');
+  const [showSLAModal, setShowSLAModal] = useState(false);
+  const [selectedSLA, setSelectedSLA] = useState(null);
+
+  // Predefined status options
+  const [statusOptions, setStatusOptions] = useState([
+    'New Request',
+    'In Review',
+    'Processing',
+    'Awaiting Documents',
+    'Customs Inspection',
+    'Cleared',
+    'Delivered',
+    'On Hold',
+    'Completed',
+    'Cancelled'
+  ]);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,9 +165,7 @@ const ClearingAgentDashboard = () => {
   const [alertsPerPage] = useState(3);
 
   // Filter states
-  const [containerFilter, setContainerFilter] = useState('all');
   const [containerSearch, setContainerSearch] = useState('');
-  const [containerStatusFilter, setContainerStatusFilter] = useState('all');
   const [containerSortBy, setContainerSortBy] = useState('date-desc');
   const [expandedContainerTab, setExpandedContainerTab] = useState('info');
   const [documentFilter, setDocumentFilter] = useState('all');
@@ -158,19 +189,68 @@ const ClearingAgentDashboard = () => {
   });
 
   // Color theme
-  const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+   const colors = {
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
+
+  // SLA Documents Data
+  const slaDocuments = {
+    'CLR-001': {
+      name: 'SLA Agreement - ImportFlow Ltd',
+      type: 'pdf',
+      size: '1.2 MB',
+      signedDate: '2026-07-15',
+      expiryDate: '2026-12-31',
+      status: 'Active',
+      documentUrl: '/sla/clr-001.pdf'
+    },
+    'CLR-002': {
+      name: 'SLA Agreement - Global Textiles Uganda Ltd',
+      type: 'pdf',
+      size: '0.9 MB',
+      signedDate: '2026-07-20',
+      expiryDate: '2026-12-31',
+      status: 'Active',
+      documentUrl: '/sla/clr-002.pdf'
+    },
+    'CLR-003': {
+      name: 'SLA Agreement - Machinery Uganda Ltd',
+      type: 'pdf',
+      size: '1.1 MB',
+      signedDate: '2026-06-10',
+      expiryDate: '2026-12-31',
+      status: 'Active',
+      documentUrl: '/sla/clr-003.pdf'
+    },
+    'CLR-004': {
+      name: 'SLA Agreement - Packaging Solutions Ltd',
+      type: 'pdf',
+      size: '0.8 MB',
+      signedDate: '2026-08-01',
+      expiryDate: '2026-12-31',
+      status: 'Pending',
+      documentUrl: '/sla/clr-004.pdf'
+    },
+    'CLR-005': {
+      name: 'SLA Agreement - AutoParts Uganda Ltd',
+      type: 'pdf',
+      size: '1.0 MB',
+      signedDate: '2026-07-25',
+      expiryDate: '2026-12-31',
+      status: 'Active',
+      documentUrl: '/sla/clr-005.pdf'
+    }
+  };
 
   // Document data for containers
   const containerDocuments = {
@@ -265,7 +345,7 @@ const ClearingAgentDashboard = () => {
     },
   ];
 
-  // Enhanced Container Data for Clearing Agent
+  // Enhanced Container Data for Clearing Agent with SLA and Progress
   const containersData = [
     {
       id: 'CLR-001',
@@ -277,7 +357,7 @@ const ClearingAgentDashboard = () => {
       volume: '67.5 m³',
       measurement: '12.2m x 2.4m x 2.9m',
       cargoDescription: 'Premium Electronics and Circuit Components',
-      importer: 'ImportFlow Ltd',
+      client: 'ImportFlow Ltd',
       consignee: {
         name: 'ImportFlow Ltd',
         contact: '+256 700 123456',
@@ -304,7 +384,7 @@ const ClearingAgentDashboard = () => {
       agentProgress: 65,
       agentStatus: 'Document Submission in Progress',
       assignmentDate: '2026-08-01',
-      assignmentStatus: 'Accepted',
+      assignmentStatus: 'New Request',
       clearanceStatus: 'In Progress',
       daysInPort: 5,
       transitStatus: 'At Port',
@@ -316,6 +396,8 @@ const ClearingAgentDashboard = () => {
       transporterStatus: 'Loading at Port',
       transporterLocation: 'Mombasa Port',
       transporterETA: '2026-08-16 14:00',
+      slaStatus: 'Active',
+      myProgress: 45,
       packingLists: [
         {
           id: 'PL-001',
@@ -394,7 +476,8 @@ const ClearingAgentDashboard = () => {
       delayed: false,
       delayReason: null,
       actionRequired: 'Submit Customs Declaration',
-      daysInTransit: 16
+      daysInTransit: 16,
+      dateReceived: '2026-08-01'
     },
     {
       id: 'CLR-002',
@@ -406,7 +489,7 @@ const ClearingAgentDashboard = () => {
       volume: '33.2 m³',
       measurement: '6.0m x 2.4m x 2.6m',
       cargoDescription: 'Textile Fabrics and Dyeing Agents',
-      importer: 'Global Textiles Uganda Ltd',
+      client: 'Global Textiles Uganda Ltd',
       consignee: {
         name: 'Global Textiles Uganda Ltd',
         contact: '+256 712 345678',
@@ -433,7 +516,7 @@ const ClearingAgentDashboard = () => {
       agentProgress: 65,
       agentStatus: 'Document Submission in Progress',
       assignmentDate: '2026-08-05',
-      assignmentStatus: 'Pending',
+      assignmentStatus: 'Processing',
       clearanceStatus: 'Awaiting Documents',
       daysInPort: 3,
       transitStatus: 'At Port',
@@ -445,6 +528,8 @@ const ClearingAgentDashboard = () => {
       transporterStatus: 'Loading at Port',
       transporterLocation: 'Mombasa Port',
       transporterETA: '2026-08-16 14:00',
+      slaStatus: 'Active',
+      myProgress: 70,
       packingLists: [
         {
           id: 'PL-004',
@@ -503,7 +588,8 @@ const ClearingAgentDashboard = () => {
       delayed: false,
       delayReason: null,
       actionRequired: 'Submit UNBS CoC certificate',
-      daysInTransit: 4
+      daysInTransit: 4,
+      dateReceived: '2026-08-05'
     },
     {
       id: 'CLR-003',
@@ -515,7 +601,7 @@ const ClearingAgentDashboard = () => {
       volume: '71.8 m³',
       measurement: '12.2m x 2.4m x 2.9m',
       cargoDescription: 'Industrial Machinery and Spare Parts',
-      importer: 'Machinery Uganda Ltd',
+      client: 'Machinery Uganda Ltd',
       consignee: {
         name: 'Machinery Uganda Ltd',
         contact: '+256 701 234567',
@@ -554,6 +640,8 @@ const ClearingAgentDashboard = () => {
       transporterStatus: 'Delivered',
       transporterLocation: 'Nairobi Warehouse',
       transporterETA: 'Delivered',
+      slaStatus: 'Completed',
+      myProgress: 100,
       packingLists: [
         {
           id: 'PL-006',
@@ -599,7 +687,8 @@ const ClearingAgentDashboard = () => {
       delayed: false,
       delayReason: null,
       actionRequired: 'Release final documents',
-      daysInTransit: 16
+      daysInTransit: 16,
+      dateReceived: '2026-07-20'
     },
     {
       id: 'CLR-004',
@@ -611,7 +700,7 @@ const ClearingAgentDashboard = () => {
       volume: '33.2 m³',
       measurement: '6.0m x 2.4m x 2.6m',
       cargoDescription: 'Packaging Materials and Consumables',
-      importer: 'Packaging Solutions Ltd',
+      client: 'Packaging Solutions Ltd',
       consignee: {
         name: 'Packaging Solutions Ltd',
         contact: '+256 704 567890',
@@ -633,7 +722,7 @@ const ClearingAgentDashboard = () => {
       agentProgress: 25,
       agentStatus: 'Awaiting Documents',
       assignmentDate: '2026-09-01',
-      assignmentStatus: 'Accepted',
+      assignmentStatus: 'Referred',
       clearanceStatus: 'Not Started',
       daysInPort: 0,
       transitStatus: 'At Sea',
@@ -645,6 +734,8 @@ const ClearingAgentDashboard = () => {
       transporterStatus: null,
       transporterLocation: null,
       transporterETA: null,
+      slaStatus: 'Pending',
+      myProgress: 20,
       packingLists: [
         {
           id: 'PL-007',
@@ -687,7 +778,8 @@ const ClearingAgentDashboard = () => {
       delayed: false,
       delayReason: null,
       actionRequired: 'Prepare customs documentation',
-      daysInTransit: 3
+      daysInTransit: 3,
+      dateReceived: '2026-09-01'
     },
     {
       id: 'CLR-005',
@@ -699,7 +791,7 @@ const ClearingAgentDashboard = () => {
       volume: '67.5 m³',
       measurement: '12.2m x 2.4m x 2.9m',
       cargoDescription: 'Automotive Components and Accessories',
-      importer: 'AutoParts Uganda Ltd',
+      client: 'AutoParts Uganda Ltd',
       consignee: {
         name: 'AutoParts Uganda Ltd',
         contact: '+256 705 678901',
@@ -726,7 +818,7 @@ const ClearingAgentDashboard = () => {
       agentProgress: 40,
       agentStatus: 'Document Review',
       assignmentDate: '2026-08-25',
-      assignmentStatus: 'Refer',
+      assignmentStatus: 'Declined',
       clearanceStatus: 'On Hold',
       daysInPort: 6,
       transitStatus: 'At Port',
@@ -738,6 +830,8 @@ const ClearingAgentDashboard = () => {
       transporterStatus: 'Awaiting Customs Clearance',
       transporterLocation: 'Mombasa Port - Customs Bond',
       transporterETA: '2026-09-18 09:00',
+      slaStatus: 'Expired',
+      myProgress: 35,
       packingLists: [
         {
           id: 'PL-008',
@@ -798,14 +892,36 @@ const ClearingAgentDashboard = () => {
       delayed: true,
       delayReason: 'Port congestion - 3 day delay',
       actionRequired: 'Contact shipping line for updated ETA',
-      daysInTransit: 16
+      daysInTransit: 16,
+      dateReceived: '2026-08-25'
     }
   ];
 
-  // Get unique importers for filter
-  const getUniqueImporters = () => {
-    const importers = containersData.map(c => c.importer);
-    return ['all', ...new Set(importers)];
+  // Get filtered containers based on active tab
+  const getFilteredByTab = () => {
+    let filtered = [...containersData];
+    
+    switch(activeTab) {
+      case 'new':
+        filtered = filtered.filter(c => c.assignmentStatus === 'New Request');
+        break;
+      case 'accepted':
+        filtered = filtered.filter(c => c.assignmentStatus === 'Accepted' || c.assignmentStatus === 'Processing');
+        break;
+      case 'referred':
+        filtered = filtered.filter(c => c.assignmentStatus === 'Referred');
+        break;
+      case 'processed':
+        filtered = filtered.filter(c => c.assignmentStatus === 'Completed' || c.assignmentStatus === 'Cleared');
+        break;
+      case 'declined':
+        filtered = filtered.filter(c => c.assignmentStatus === 'Declined' || c.assignmentStatus === 'Cancelled');
+        break;
+      default:
+        break;
+    }
+    
+    return filtered;
   };
 
   // Get unique alert categories
@@ -834,11 +950,25 @@ const ClearingAgentDashboard = () => {
   // Get assignment status color
   const getAssignmentStatusColor = (status) => {
     switch(status) {
+      case 'New Request': return colors.info;
       case 'Accepted': return colors.success;
-      case 'Pending': return colors.warning;
-      case 'Refer': return colors.info;
+      case 'Processing': return colors.warning;
+      case 'Referred': return colors.primary;
       case 'Completed': return colors.success;
-      case 'Rejected': return colors.danger;
+      case 'Cleared': return colors.success;
+      case 'Declined': return colors.danger;
+      case 'Cancelled': return colors.danger;
+      default: return colors.info;
+    }
+  };
+
+  // Get SLA status color
+  const getSLAStatusColor = (status) => {
+    switch(status) {
+      case 'Active': return colors.success;
+      case 'Pending': return colors.warning;
+      case 'Completed': return colors.success;
+      case 'Expired': return colors.danger;
       default: return colors.info;
     }
   };
@@ -919,18 +1049,8 @@ const ClearingAgentDashboard = () => {
 
   // Filtered containers with multiple filters
   const getFilteredContainers = () => {
-    let filtered = [...containersData];
-
-    // Status filter
-    if (containerFilter !== 'all') {
-      filtered = filtered.filter(c => c.status === containerFilter);
-    }
-
-    // Assignment status filter
-    if (containerStatusFilter !== 'all') {
-      filtered = filtered.filter(c => c.assignmentStatus === containerStatusFilter);
-    }
-
+    let filtered = getFilteredByTab();
+    
     // Search filter
     if (containerSearch) {
       const search = containerSearch.toLowerCase();
@@ -939,17 +1059,17 @@ const ClearingAgentDashboard = () => {
         c.sealNo.toLowerCase().includes(search) ||
         c.voyage.toLowerCase().includes(search) ||
         c.cargoDescription.toLowerCase().includes(search) ||
-        c.importer.toLowerCase().includes(search)
+        c.client.toLowerCase().includes(search)
       );
     }
-
+    
     // Sort
     switch(containerSortBy) {
       case 'date-desc':
-        filtered.sort((a, b) => new Date(b.eta) - new Date(a.eta));
+        filtered.sort((a, b) => new Date(b.dateReceived || b.assignmentDate) - new Date(a.dateReceived || a.assignmentDate));
         break;
       case 'date-asc':
-        filtered.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+        filtered.sort((a, b) => new Date(a.dateReceived || a.assignmentDate) - new Date(b.dateReceived || b.assignmentDate));
         break;
       case 'packages-desc':
         filtered.sort((a, b) => b.packages - a.packages);
@@ -958,12 +1078,15 @@ const ClearingAgentDashboard = () => {
         filtered.sort((a, b) => (b.daysInPort || 0) - (a.daysInPort || 0));
         break;
       case 'status':
-        filtered.sort((a, b) => a.status.localeCompare(b.status));
+        filtered.sort((a, b) => a.assignmentStatus.localeCompare(b.assignmentStatus));
+        break;
+      case 'progress-desc':
+        filtered.sort((a, b) => (b.myProgress || 0) - (a.myProgress || 0));
         break;
       default:
         break;
     }
-
+    
     return filtered;
   };
 
@@ -1017,18 +1140,12 @@ const ClearingAgentDashboard = () => {
     atPort: containersData.filter(c => c.status === 'At Port').length,
     inTransit: containersData.filter(c => c.status === 'In Transit').length,
     cleared: containersData.filter(c => c.status === 'Cleared').length,
-    pending: containersData.filter(c => c.assignmentStatus === 'Pending').length,
-    accepted: containersData.filter(c => c.assignmentStatus === 'Accepted').length,
-    referred: containersData.filter(c => c.assignmentStatus === 'Refer').length
+    new: containersData.filter(c => c.assignmentStatus === 'New Request').length,
+    accepted: containersData.filter(c => c.assignmentStatus === 'Accepted' || c.assignmentStatus === 'Processing').length,
+    referred: containersData.filter(c => c.assignmentStatus === 'Referred').length,
+    processed: containersData.filter(c => c.assignmentStatus === 'Completed' || c.assignmentStatus === 'Cleared').length,
+    declined: containersData.filter(c => c.assignmentStatus === 'Declined' || c.assignmentStatus === 'Cancelled').length
   };
-
-  // Available transporters for assignment
-  const availableTransporters = [
-    { id: 'TRP-001', name: 'East African Logistics', email: 'dispatch@eastafricalogistics.com', contact: '+256 712 345678' },
-    { id: 'TRP-002', name: 'Trans-East Cargo Services', email: 'dispatch@trans-eastcargo.com', contact: '+256 703 456789' },
-    { id: 'TRP-003', name: 'Kampala Freight Forwarders', email: 'info@kampalafreight.com', contact: '+256 701 234567' },
-    { id: 'TRP-004', name: 'Mombasa-Nairobi Haulage', email: 'dispatch@mombasanairobi.com', contact: '+254 700 123456' }
-  ];
 
   // Handle container toggle expand
   const toggleContainerExpand = (containerId) => {
@@ -1045,12 +1162,8 @@ const ClearingAgentDashboard = () => {
   };
 
   const confirmAssignmentAction = () => {
-    // In a real app, this would make an API call
     console.log(`Action: ${actionType} on container ${selectedContainerForAction.id}`, actionReason);
-    setShowActionModal(false);
-    setSelectedContainerForAction(null);
-    setActionReason('');
-    // Update the container status
+    
     const updatedContainers = containersData.map(c => {
       if (c.id === selectedContainerForAction.id) {
         let newStatus = c.assignmentStatus;
@@ -1059,10 +1172,10 @@ const ClearingAgentDashboard = () => {
             newStatus = 'Accepted';
             break;
           case 'reject':
-            newStatus = 'Rejected';
+            newStatus = 'Declined';
             break;
           case 'refer':
-            newStatus = 'Refer';
+            newStatus = 'Referred';
             break;
           default:
             break;
@@ -1071,7 +1184,10 @@ const ClearingAgentDashboard = () => {
       }
       return c;
     });
-    // Update state if needed
+    
+    setShowActionModal(false);
+    setSelectedContainerForAction(null);
+    setActionReason('');
   };
 
   // Handle send bill
@@ -1088,36 +1204,56 @@ const ClearingAgentDashboard = () => {
     setSelectedContainerForAction(null);
     setBillAmount('');
     setBillDescription('');
-    // Update payment status
+  };
+
+  // Handle update status
+  const handleUpdateStatus = (container) => {
+    setSelectedContainerForAction(container);
+    setNewStatus(container.assignmentStatus);
+    setStatusNote('');
+    setShowStatusModal(true);
+  };
+
+  const confirmStatusUpdate = () => {
+    console.log(`Updating status for ${selectedContainerForAction.id} to ${newStatus}`, statusNote);
     const updatedContainers = containersData.map(c => {
       if (c.id === selectedContainerForAction.id) {
-        return { ...c, paymentStatus: 'Pending' };
+        return { ...c, assignmentStatus: newStatus };
       }
       return c;
     });
+    setShowStatusModal(false);
+    setSelectedContainerForAction(null);
+    setNewStatus('');
+    setStatusNote('');
   };
 
-  // Handle notify importer
-  const handleNotifyImporter = (container) => {
-    console.log(`Notifying importer for ${container.id}`);
-    alert(`Notification sent to ${container.importer} for container ${container.id}`);
+  // Handle adding custom status
+  const handleAddCustomStatus = () => {
+    if (customStatusInput.trim() && !statusOptions.includes(customStatusInput.trim())) {
+      setStatusOptions([...statusOptions, customStatusInput.trim()]);
+      setNewStatus(customStatusInput.trim());
+      setCustomStatusInput('');
+      setShowCustomStatusInput(false);
+    }
   };
 
-  // Handle notify transporter
-  const handleNotifyTransporter = (container) => {
-    console.log(`Notifying transporter for ${container.id}`);
-    alert(`Notification sent to ${container.assignedTransporter?.name || 'Transporter'} for container ${container.id}`);
+  // Handle view SLA document
+  const handleViewSLA = (containerId) => {
+    const sla = slaDocuments[containerId];
+    if (sla) {
+      setSelectedSLA(sla);
+      setShowSLAModal(true);
+    }
   };
 
-  // Handle mark goods ready
-  const handleMarkGoodsReady = (container) => {
-    console.log(`Marking goods ready for ${container.id}`);
-    const updatedContainers = containersData.map(c => {
-      if (c.id === container.id) {
-        return { ...c, transporterReady: true, transporterStatus: 'Ready for Pickup' };
-      }
-      return c;
-    });
+  // Handle download SLA document
+  const handleDownloadSLA = (containerId) => {
+    const sla = slaDocuments[containerId];
+    if (sla) {
+      console.log(`Downloading SLA document for ${containerId}: ${sla.name}`);
+      window.open(sla.documentUrl, '_blank');
+    }
   };
 
   // Handle view document
@@ -1128,7 +1264,6 @@ const ClearingAgentDashboard = () => {
   // Handle download document
   const handleDownloadDocument = (doc) => {
     console.log(`Downloading document ${doc.id}`);
-    // In a real app, this would trigger a download
   };
 
   // Handle page change
@@ -1166,8 +1301,6 @@ const ClearingAgentDashboard = () => {
 
   // Reset filters
   const resetContainerFilters = () => {
-    setContainerFilter('all');
-    setContainerStatusFilter('all');
     setContainerSearch('');
     setContainerSortBy('date-desc');
     setCurrentPage(1);
@@ -1181,25 +1314,270 @@ const ClearingAgentDashboard = () => {
     setAlertsPage(1);
   };
 
-  // Handle card click to filter by status
-  const handleCardClick = (status, filterType = 'status') => {
-    // Reset to first page when filtering
+  // Handle tab change
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
     setCurrentPage(1);
+  };
+
+  // Render responsive container card for mobile
+  const renderResponsiveCard = (container) => {
+    const transitInfo = getTransitStatusDisplay(container);
+    const sla = slaDocuments[container.id];
+    const isExpanded = expandedContainerId === container.id;
     
-    // If clicking the same status, deselect it (show all)
-    if (filterType === 'status') {
-      if (containerFilter === status) {
-        setContainerFilter('all');
-      } else {
-        setContainerFilter(status);
-      }
-    } else if (filterType === 'assignment') {
-      if (containerStatusFilter === status) {
-        setContainerStatusFilter('all');
-      } else {
-        setContainerStatusFilter(status);
-      }
-    }
+    return (
+      <div 
+        key={container.id} 
+        className={`rounded-lg transition-all duration-300 mb-3 ${
+          isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+        } ${isExpanded ? 'ring-1 ring-primary' : ''}`}
+        style={{ ringColor: isExpanded ? colors.primary : 'transparent' }}
+      >
+        <div className="p-3">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Anchor className="w-4 h-4" style={{ color: colors.primary }} />
+              <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {container.id}
+              </span>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full`}
+              style={{
+                backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
+                color: getAssignmentStatusColor(container.assignmentStatus)
+              }}>
+              {container.assignmentStatus}
+            </span>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-2 gap-1 text-xs">
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Date:</span>
+              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                {container.dateReceived || container.assignmentDate || 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Client:</span>
+              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                {container.client}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Status:</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 flex items-center gap-1`}
+                style={{
+                  backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
+                  color: getAssignmentStatusColor(container.assignmentStatus)
+                }}
+                onClick={() => handleUpdateStatus(container)}
+                title="Click to update status">
+                <Edit className="w-2.5 h-2.5" />
+                {container.assignmentStatus}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Progress:</span>
+              <div className="flex items-center gap-1">
+                <Gauge className="w-3 h-3" style={{ color: getAgentProgressColor(container.myProgress || 0) }} />
+                <span className={`font-medium`} style={{ color: getAgentProgressColor(container.myProgress || 0) }}>
+                  {container.myProgress || 0}%
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>SLA:</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 cursor-pointer hover:opacity-80`}
+                style={{
+                  backgroundColor: getSLAStatusColor(container.slaStatus) + '20',
+                  color: getSLAStatusColor(container.slaStatus)
+                }}
+                onClick={() => handleViewSLA(container.id)}
+                title="Click to view SLA">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                {container.slaStatus}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transit:</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1`}
+                style={{
+                  backgroundColor: transitInfo.color + '20',
+                  color: transitInfo.color
+                }}>
+                {transitInfo.icon}
+                {container.transitStatus === 'At Port' ? `${container.daysInPort || 0}d` : 
+                 container.transitStatus === 'At Sea' ? `${container.daysInTransit || 0}d` : 
+                 'Delivered'}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b" style={{ borderColor: isDark ? '#374151' : '#f3f4f6' }}>
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA:</span>
+              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                {container.expectedArrivalDate || container.eta}
+              </span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Payment:</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full`}
+                style={{
+                  backgroundColor: container.paymentStatus === 'Paid' ? colors.success + '20' : colors.warning + '20',
+                  color: container.paymentStatus === 'Paid' ? colors.success : colors.warning
+                }}>
+                {container.paymentStatus}
+              </span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-1 mt-3 pt-2 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+            <button
+              onClick={() => toggleContainerExpand(container.id)}
+              className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Eye className="w-3 h-3" />
+              {isExpanded ? 'Hide' : 'View'}
+            </button>
+            
+            {container.assignmentStatus === 'New Request' && (
+              <>
+                <button
+                  onClick={() => handleAssignmentAction(container, 'accept')}
+                  className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.success }}
+                >
+                  <ThumbsUp className="w-3 h-3" />
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleAssignmentAction(container, 'reject')}
+                  className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.danger }}
+                >
+                  <ThumbsDown className="w-3 h-3" />
+                  Decline
+                </button>
+                <button
+                  onClick={() => handleAssignmentAction(container, 'refer')}
+                  className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.info }}
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  Refer
+                </button>
+              </>
+            )}
+            
+            {container.assignmentStatus === 'Accepted' && (
+              <>
+                <button
+                  onClick={() => handleSendBill(container)}
+                  className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Send className="w-3 h-3" />
+                  Bill
+                </button>
+                <button
+                  onClick={() => handleUpdateStatus(container)}
+                  className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.warning }}
+                >
+                  <Edit className="w-3 h-3" />
+                  Status
+                </button>
+              </>
+            )}
+            
+            {(container.assignmentStatus === 'Processing' || 
+              container.assignmentStatus === 'Referred' || 
+              container.assignmentStatus === 'Cleared') && (
+              <button
+                onClick={() => handleUpdateStatus(container)}
+                className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.warning }}
+              >
+                <Edit className="w-3 h-3" />
+                Status
+              </button>
+            )}
+            
+            <button
+              onClick={() => handlePrint(container)}
+              className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Printer className="w-3 h-3" />
+              Print
+            </button>
+          </div>
+
+          {/* Collapse Arrow */}
+          {isExpanded && (
+            <div className="flex justify-center mt-2 pt-2 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+              <button
+                onClick={() => toggleContainerExpand(container.id)}
+                className="flex items-center gap-1 px-3 py-1 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                style={{ color: colors.primary }}
+              >
+                <ChevronUp className="w-3 h-3" />
+                <span className="text-[10px]">Hide Details</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className={`p-3 border-t ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Cargo:</span>
+                <span className={`text-right ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {container.cargoDescription}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transporter:</span>
+                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                  {container.assignedTransporter?.name || 'Not Assigned'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Clearance:</span>
+                <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full`}
+                  style={{
+                    backgroundColor: getClearanceStatusColor(container.clearanceStatus) + '20',
+                    color: getClearanceStatusColor(container.clearanceStatus)
+                  }}>
+                  {container.clearanceStatus}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Voyage:</span>
+                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{container.voyage}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Packages:</span>
+                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{container.packages}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Gross Weight:</span>
+                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{container.grossWeight}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Location:</span>
+                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{container.location}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Render Print Modal
@@ -1348,9 +1726,15 @@ const ClearingAgentDashboard = () => {
     if (!showActionModal || !selectedContainerForAction) return null;
 
     const actionLabels = {
-      accept: 'Accept Assignment',
-      reject: 'Reject Assignment',
-      refer: 'Refer Assignment'
+      accept: 'Accept Request',
+      reject: 'Decline Request',
+      refer: 'Refer Request'
+    };
+
+    const actionDescriptions = {
+      accept: 'Accept this clearance request and start processing',
+      reject: 'Decline this clearance request',
+      refer: 'Refer this request to another department for review'
     };
 
     const actionColors = {
@@ -1360,8 +1744,8 @@ const ClearingAgentDashboard = () => {
     };
 
     const actionIcons = {
-      accept: <Check className="w-5 h-5" />,
-      reject: <X className="w-5 h-5" />,
+      accept: <ThumbsUp className="w-5 h-5" />,
+      reject: <ThumbsDown className="w-5 h-5" />,
       refer: <AlertCircle className="w-5 h-5" />
     };
 
@@ -1378,9 +1762,14 @@ const ClearingAgentDashboard = () => {
               <span style={{ color: actionColors[actionType] }}>
                 {actionIcons[actionType]}
               </span>
-              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {actionLabels[actionType]}
-              </h3>
+              <div>
+                <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {actionLabels[actionType]}
+                </h3>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {actionDescriptions[actionType]}
+                </p>
+              </div>
             </div>
             <button
               onClick={() => setShowActionModal(false)}
@@ -1391,12 +1780,27 @@ const ClearingAgentDashboard = () => {
           </div>
 
           <div className="p-4">
-            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Container: <span className="font-medium">{selectedContainerForAction.id}</span>
-            </p>
-            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Importer: <span className="font-medium">{selectedContainerForAction.importer}</span>
-            </p>
+            <div className="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
+              <div className="flex justify-between text-sm">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Container:</span>
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {selectedContainerForAction.id}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm mt-1">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Client:</span>
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {selectedContainerForAction.client}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm mt-1">
+                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Cargo:</span>
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {selectedContainerForAction.cargoDescription.substring(0, 30)}...
+                </span>
+              </div>
+            </div>
+
             <div className="mb-4">
               <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                 Reason (Optional)
@@ -1412,6 +1816,7 @@ const ClearingAgentDashboard = () => {
                 style={{ focusRingColor: colors.primary }}
               />
             </div>
+
             <div className="flex gap-2">
               <button
                 onClick={() => setShowActionModal(false)}
@@ -1426,7 +1831,7 @@ const ClearingAgentDashboard = () => {
                 className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
                 style={{ backgroundColor: actionColors[actionType] }}
               >
-                Confirm {actionLabels[actionType]}
+                {actionLabels[actionType]}
               </button>
             </div>
           </div>
@@ -1451,7 +1856,7 @@ const ClearingAgentDashboard = () => {
             <div className="flex items-center gap-3">
               <DollarIcon className="w-5 h-5" style={{ color: colors.primary }} />
               <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Send Bill to Importer
+                Send Bill to Client
               </h3>
             </div>
             <button
@@ -1467,7 +1872,7 @@ const ClearingAgentDashboard = () => {
               Container: <span className="font-medium">{selectedContainerForAction.id}</span>
             </p>
             <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Importer: <span className="font-medium">{selectedContainerForAction.importer}</span>
+              Client: <span className="font-medium">{selectedContainerForAction.client}</span>
             </p>
             <div className="mb-4">
               <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1515,6 +1920,279 @@ const ClearingAgentDashboard = () => {
               >
                 <Send className="w-4 h-4 inline mr-2" />
                 Send Bill
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render Status Update Modal
+  const StatusUpdateModal = () => {
+    if (!showStatusModal || !selectedContainerForAction) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+           onClick={() => setShowStatusModal(false)}>
+        <div
+          className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+            style={{ backgroundColor: colors.primary + '10' }}>
+            <div className="flex items-center gap-3">
+              <Edit className="w-5 h-5" style={{ color: colors.primary }} />
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Update Status - {selectedContainerForAction.id}
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowStatusModal(false)}
+              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              Current Status: <span className="font-medium" style={{ color: getAssignmentStatusColor(selectedContainerForAction.assignmentStatus) }}>
+                {selectedContainerForAction.assignmentStatus}
+              </span>
+            </p>
+
+            <div className="mb-4">
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Select New Status
+              </label>
+              <div className="space-y-2 max-h-48 overflow-y-auto mt-2">
+                {statusOptions.map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setNewStatus(status)}
+                    className={`w-full px-3 py-2 rounded-lg text-sm text-left transition-all duration-200 ${
+                      newStatus === status
+                        ? 'ring-2 bg-opacity-20'
+                        : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                    }`}
+                    style={{
+                      backgroundColor: newStatus === status ? getAssignmentStatusColor(status) + '20' : 'transparent',
+                      ringColor: getAssignmentStatusColor(status),
+                      color: isDark ? '#fff' : '#111827'
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getAssignmentStatusColor(status) }} />
+                      <span>{status}</span>
+                      {newStatus === status && <Check className="w-4 h-4 ml-auto" style={{ color: getAssignmentStatusColor(status) }} />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Add Custom Status */}
+              <div className="mt-3">
+                {!showCustomStatusInput ? (
+                  <button
+                    onClick={() => setShowCustomStatusInput(true)}
+                    className="text-sm flex items-center gap-1 transition-colors hover:opacity-80"
+                    style={{ color: colors.primary }}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Custom Status
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customStatusInput}
+                      onChange={(e) => setCustomStatusInput(e.target.value)}
+                      placeholder="Enter custom status..."
+                      className={`flex-1 px-3 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                        isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      style={{ focusRingColor: colors.primary }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddCustomStatus();
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={handleAddCustomStatus}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Save className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCustomStatusInput(false);
+                        setCustomStatusInput('');
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      style={{ color: colors.danger }}
+                    >
+                      <XIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Note (Optional)
+              </label>
+              <textarea
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+                placeholder="Add a note about this status update..."
+                className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+                rows="2"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStatusUpdate}
+                disabled={!newStatus}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 ${
+                  !newStatus ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                }`}
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Save className="w-4 h-4 inline mr-2" />
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render SLA Modal
+  const SLAModal = () => {
+    if (!showSLAModal || !selectedSLA) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+           onClick={() => setShowSLAModal(false)}>
+        <div
+          className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+            style={{ backgroundColor: colors.primary + '10' }}>
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="w-5 h-5" style={{ color: colors.primary }} />
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                SLA Document Details
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowSLAModal(false)}
+              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <div className="space-y-3">
+              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Document Name</p>
+                <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {selectedSLA.name}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type</p>
+                  <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedSLA.type.toUpperCase()}
+                  </p>
+                </div>
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
+                  <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedSLA.size}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Signed Date</p>
+                  <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedSLA.signedDate}
+                  </p>
+                </div>
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expiry Date</p>
+                  <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedSLA.expiryDate}
+                  </p>
+                </div>
+              </div>
+              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
+                <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
+                  style={{
+                    backgroundColor: getSLAStatusColor(selectedSLA.status) + '20',
+                    color: getSLAStatusColor(selectedSLA.status)
+                  }}>
+                  {selectedSLA.status === 'Active' && <CheckCircle className="w-3 h-3" />}
+                  {selectedSLA.status === 'Pending' && <Clock className="w-3 h-3" />}
+                  {selectedSLA.status === 'Completed' && <CheckCircle className="w-3 h-3" />}
+                  {selectedSLA.status === 'Expired' && <AlertCircle className="w-3 h-3" />}
+                  {selectedSLA.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setShowSLAModal(false)}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  window.open(selectedSLA.documentUrl, '_blank');
+                  setShowSLAModal(false);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Eye className="w-4 h-4" />
+                View Document
+              </button>
+              <button
+                onClick={() => {
+                  window.open(selectedSLA.documentUrl, '_blank');
+                  setShowSLAModal(false);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ backgroundColor: colors.info }}
+              >
+                <Download className="w-4 h-4" />
+                Download
               </button>
             </div>
           </div>
@@ -1629,14 +2307,6 @@ const ClearingAgentDashboard = () => {
                         >
                           <Download className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handlePrint(doc)}
-                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                          style={{ color: colors.primary }}
-                          title="Print Document"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1654,7 +2324,7 @@ const ClearingAgentDashboard = () => {
     );
   };
 
-  // Render expanded container details
+  // Render expanded container details (for list view)
   const renderExpandedContainer = (container) => {
     const isExpanded = expandedContainerId === container.id;
     if (!isExpanded) return null;
@@ -1667,10 +2337,11 @@ const ClearingAgentDashboard = () => {
     ];
 
     const transitInfo = getTransitStatusDisplay(container);
+    const sla = slaDocuments[container.id];
 
     return (
       <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <td colSpan="9" className="p-0">
+        <td colSpan="11" className="p-0">
           <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
             {/* Status Banner */}
             <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2`}
@@ -1710,77 +2381,77 @@ const ClearingAgentDashboard = () => {
             </div>
 
             {/* Quick Action Buttons */}
-            {container.assignmentStatus === 'Pending' && (
+            {container.assignmentStatus === 'New Request' && (
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   onClick={() => handleAssignmentAction(container, 'accept')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
                   style={{ backgroundColor: colors.success }}
                 >
-                  <Check className="w-3 h-3" />
-                  Accept
+                  <ThumbsUp className="w-4 h-4" />
+                  Accept Request
                 </button>
                 <button
                   onClick={() => handleAssignmentAction(container, 'reject')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
                   style={{ backgroundColor: colors.danger }}
                 >
-                  <X className="w-3 h-3" />
-                  Reject
+                  <ThumbsDown className="w-4 h-4" />
+                  Decline Request
                 </button>
                 <button
                   onClick={() => handleAssignmentAction(container, 'refer')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
                   style={{ backgroundColor: colors.info }}
                 >
-                  <AlertCircle className="w-3 h-3" />
-                  Refer
+                  <AlertCircle className="w-4 h-4" />
+                  Refer Request
                 </button>
               </div>
             )}
 
-            {container.assignmentStatus === 'Accepted' && container.paymentStatus === 'Pending' && (
+            {container.assignmentStatus === 'Accepted' && (
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   onClick={() => handleSendBill(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
                   style={{ backgroundColor: colors.primary }}
                 >
-                  <Send className="w-3 h-3" />
-                  Send Bill
+                  <Send className="w-4 h-4" />
+                  Send Bill to Client
+                </button>
+                <button
+                  onClick={() => handleUpdateStatus(container)}
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+                  style={{ backgroundColor: colors.warning }}
+                >
+                  <Edit className="w-4 h-4" />
+                  Update Status
                 </button>
               </div>
             )}
 
-            {container.assignmentStatus === 'Accepted' && container.paymentStatus === 'Paid' && (
+            {(container.assignmentStatus === 'Processing' || 
+              container.assignmentStatus === 'Referred' || 
+              container.assignmentStatus === 'Cleared') && (
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
-                  onClick={() => handleNotifyImporter(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.info }}
+                  onClick={() => handleUpdateStatus(container)}
+                  className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+                  style={{ backgroundColor: colors.warning }}
                 >
-                  <Mail className="w-3 h-3" />
-                  Notify Importer
+                  <Edit className="w-4 h-4" />
+                  Update Status
                 </button>
                 {container.assignedTransporter && (
-                  <>
-                    <button
-                      onClick={() => handleNotifyTransporter(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.info }}
-                    >
-                      <Truck className="w-3 h-3" />
-                      Notify Transporter
-                    </button>
-                    <button
-                      onClick={() => handleMarkGoodsReady(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.success }}
-                    >
-                      <Check className="w-3 h-3" />
-                      Mark Goods Ready
-                    </button>
-                  </>
+                  <button
+                    onClick={() => alert(`Notifying transporter for ${container.id}`)}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+                    style={{ backgroundColor: colors.info }}
+                  >
+                    <Truck className="w-4 h-4" />
+                    Notify Transporter
+                  </button>
                 )}
               </div>
             )}
@@ -1863,9 +2534,9 @@ const ClearingAgentDashboard = () => {
                   {/* Assignment & Clearance Info */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Assignment Date</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Date Received</p>
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.assignmentDate || 'N/A'}
+                        {container.dateReceived || container.assignmentDate || 'N/A'}
                       </p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
@@ -1889,6 +2560,68 @@ const ClearingAgentDashboard = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* SLA Info */}
+                  {sla && (
+                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        <ShieldCheck className="w-4 h-4" style={{ color: colors.primary }} />
+                        Service Level Agreement (SLA)
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Document</span>
+                          <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {sla.name}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Signed Date</span>
+                          <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {sla.signedDate}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expiry Date</span>
+                          <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {sla.expiryDate}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</span>
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1`}
+                            style={{
+                              backgroundColor: getSLAStatusColor(sla.status) + '20',
+                              color: getSLAStatusColor(sla.status)
+                            }}>
+                            {sla.status === 'Active' && <CheckCircle className="w-3 h-3" />}
+                            {sla.status === 'Pending' && <Clock className="w-3 h-3" />}
+                            {sla.status === 'Completed' && <CheckCircle className="w-3 h-3" />}
+                            {sla.status === 'Expired' && <AlertCircle className="w-3 h-3" />}
+                            {sla.status}
+                          </span>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => handleViewSLA(container.id)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                            style={{ backgroundColor: colors.primary }}
+                          >
+                            <Eye className="w-3 h-3" />
+                            View SLA
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSLA(container.id)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                            style={{ backgroundColor: colors.info }}
+                          >
+                            <Download className="w-3 h-3" />
+                            Download SLA
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Ship Details & Expected Arrival */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1946,24 +2679,6 @@ const ClearingAgentDashboard = () => {
                             </div>
                           </div>
                         )}
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          <button
-                            onClick={() => handleNotifyTransporter(container)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                            style={{ backgroundColor: colors.info }}
-                          >
-                            <Mail className="w-3 h-3" />
-                            Notify Transporter
-                          </button>
-                          <button
-                            onClick={() => handleMarkGoodsReady(container)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                            style={{ backgroundColor: colors.success }}
-                          >
-                            <Check className="w-3 h-3" />
-                            Mark Goods Ready
-                          </button>
-                        </div>
                       </div>
                     ) : (
                       <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1972,17 +2687,17 @@ const ClearingAgentDashboard = () => {
                     )}
                   </div>
 
-                  {/* Importer Info */}
+                  {/* Client Info */}
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                     <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                       <User className="w-4 h-4" style={{ color: colors.primary }} />
-                      Importer Details
+                      Client Details
                     </h4>
                     <div className="space-y-2">
                       <div className="flex items-center gap-3 text-sm">
                         <Building className="w-4 h-4" style={{ color: colors.primary }} />
                         <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.importer}
+                          {container.client}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-sm">
@@ -1998,12 +2713,12 @@ const ClearingAgentDashboard = () => {
                         </span>
                       </div>
                       <button
-                        onClick={() => handleNotifyImporter(container)}
+                        onClick={() => alert(`Notifying client for ${container.id}`)}
                         className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
                         style={{ backgroundColor: colors.info }}
                       >
                         <Mail className="w-3 h-3" />
-                        Notify Importer
+                        Notify Client
                       </button>
                     </div>
                   </div>
@@ -2189,18 +2904,31 @@ const ClearingAgentDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Collapse Arrow at Bottom */}
+            <div className="mt-4 pt-3 border-t flex justify-center" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+              <button
+                onClick={() => toggleContainerExpand(container.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+                style={{ color: colors.primary }}
+              >
+                <ChevronUp className="w-4 h-4" />
+                <span className="text-xs font-medium">Hide Details</span>
+              </button>
+            </div>
           </div>
         </td>
       </tr>
     );
   };
 
-  // Render Grid View
+  // Render Grid View (for tablet and desktop)
   const renderGridView = () => {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {currentContainers.map((container) => {
           const transitInfo = getTransitStatusDisplay(container);
+          const sla = slaDocuments[container.id];
           return (
             <div key={container.id} className={`rounded-lg transition-all duration-300 ${
               isDark ? 'bg-gray-700 border border-gray-600' : 'bg-white shadow-md'
@@ -2215,36 +2943,39 @@ const ClearingAgentDashboard = () => {
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full`}
                     style={{
-                      backgroundColor: getStatusColor(container.status) + '20',
-                      color: getStatusColor(container.status)
+                      backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
+                      color: getAssignmentStatusColor(container.assignmentStatus)
                     }}>
-                    {container.status}
+                    {container.assignmentStatus}
                   </span>
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Importer:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.importer}</span>
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Client:</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.client}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Assignment:</span>
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full`}
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Progress:</span>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1`}
                       style={{
-                        backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
-                        color: getAssignmentStatusColor(container.assignmentStatus)
+                        backgroundColor: getAgentProgressColor(container.myProgress || 0) + '20',
+                        color: getAgentProgressColor(container.myProgress || 0)
                       }}>
-                      {container.assignmentStatus}
+                      <Gauge className="w-3 h-3" />
+                      {container.myProgress || 0}%
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transit:</span>
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1`}
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>SLA:</span>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 cursor-pointer hover:opacity-80`}
                       style={{
-                        backgroundColor: transitInfo.color + '20',
-                        color: transitInfo.color
-                      }}>
-                      {transitInfo.icon}
-                      {transitInfo.label}
+                        backgroundColor: getSLAStatusColor(container.slaStatus) + '20',
+                        color: getSLAStatusColor(container.slaStatus)
+                      }}
+                      onClick={() => handleViewSLA(container.id)}
+                      title="Click to view SLA">
+                      <ShieldCheck className="w-3 h-3" />
+                      {container.slaStatus}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -2256,10 +2987,6 @@ const ClearingAgentDashboard = () => {
                       }}>
                       {container.paymentStatus}
                     </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.expectedArrivalDate || container.eta}</span>
                   </div>
                   {container.delayed && (
                     <div className="flex justify-between text-red-500">
@@ -2304,39 +3031,33 @@ const ClearingAgentDashboard = () => {
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {container.assignmentStatus === 'Pending' && (
+                      {container.assignmentStatus === 'New Request' && (
                         <>
                           <button
                             onClick={() => handleAssignmentAction(container, 'accept')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
+                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-1"
                             style={{ backgroundColor: colors.success }}
                           >
+                            <ThumbsUp className="w-3 h-3" />
                             Accept
                           </button>
                           <button
                             onClick={() => handleAssignmentAction(container, 'reject')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
+                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-1"
                             style={{ backgroundColor: colors.danger }}
                           >
-                            Reject
+                            <ThumbsDown className="w-3 h-3" />
+                            Decline
                           </button>
                           <button
                             onClick={() => handleAssignmentAction(container, 'refer')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
+                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-1"
                             style={{ backgroundColor: colors.info }}
                           >
+                            <AlertCircle className="w-3 h-3" />
                             Refer
                           </button>
                         </>
-                      )}
-                      {container.assignmentStatus === 'Accepted' && container.paymentStatus === 'Pending' && (
-                        <button
-                          onClick={() => handleSendBill(container)}
-                          className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                          style={{ backgroundColor: colors.primary }}
-                        >
-                          Send Bill
-                        </button>
                       )}
                       <button
                         onClick={() => toggleContainerExpand(container.id)}
@@ -2347,6 +3068,17 @@ const ClearingAgentDashboard = () => {
                         }}
                       >
                         Details
+                      </button>
+                    </div>
+                    {/* Collapse Arrow in Grid View */}
+                    <div className="flex justify-center mt-3 pt-2 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                      <button
+                        onClick={() => toggleContainerExpand(container.id)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        style={{ color: colors.primary }}
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                        <span className="text-[10px]">Hide Details</span>
                       </button>
                     </div>
                   </div>
@@ -2450,39 +3182,35 @@ const ClearingAgentDashboard = () => {
             Welcome back, {user?.name || 'John'}! 👋
           </h1>
           <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Here's your clearing agent dashboard with all assignments.
+            Here's your clearing agent dashboard with all assignment requests.
           </p>
         </div>
 
-        {/* Stats Cards - Clickable */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4 mb-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerFilter === 'all' && containerStatusFilter === 'all' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerFilter === 'all' && containerStatusFilter === 'all' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              setContainerFilter('all');
-              setContainerStatusFilter('all');
-            }}
+            } ${activeTab === 'new' ? 'ring-1' : 'ring-1 ring-transparent'}`}
+            style={{ ringColor: activeTab === 'new' ? colors.primary : 'transparent' }}
+            onClick={() => handleTabChange('new')}
           >
             <div className="flex items-center justify-between">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
-                <Inbox className="w-5 h-5" style={{ color: colors.primary }} />
+              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.info + '20' }}>
+                <Inbox className="w-5 h-5" style={{ color: colors.info }} />
               </div>
               <span className="text-xs font-medium text-blue-500 flex items-center gap-1">
-                <ArrowUpRight className="w-3 h-3" />
-                +3
+                <Clock className="w-3 h-3" />
+                {containerStats.new}
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.total}
+              {containerStats.new}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Total Assignments
+              New Requests
             </p>
-            {containerFilter === 'all' && containerStatusFilter === 'all' && (
+            {activeTab === 'new' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
                 ✓ Active
               </span>
@@ -2492,58 +3220,13 @@ const ClearingAgentDashboard = () => {
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerStatusFilter === 'Pending' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerStatusFilter === 'Pending' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              if (containerStatusFilter === 'Pending') {
-                setContainerStatusFilter('all');
-              } else {
-                setContainerStatusFilter('Pending');
-                setContainerFilter('all');
-              }
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.warning + '20' }}>
-                <Clock className="w-5 h-5" style={{ color: colors.warning }} />
-              </div>
-              <span className="text-xs font-medium text-yellow-500 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                {containerStats.pending}
-              </span>
-            </div>
-            <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.pending}
-            </h3>
-            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Pending
-            </p>
-            {containerStatusFilter === 'Pending' && (
-              <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active
-              </span>
-            )}
-          </div>
-
-          <div 
-            className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
-              isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerStatusFilter === 'Accepted' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerStatusFilter === 'Accepted' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              if (containerStatusFilter === 'Accepted') {
-                setContainerStatusFilter('all');
-              } else {
-                setContainerStatusFilter('Accepted');
-                setContainerFilter('all');
-              }
-            }}
+            } ${activeTab === 'accepted' ? 'ring-1' : 'ring-1 ring-transparent'}`}
+            style={{ ringColor: activeTab === 'accepted' ? colors.primary : 'transparent' }}
+            onClick={() => handleTabChange('accepted')}
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.success + '20' }}>
-                <Check className="w-5 h-5" style={{ color: colors.success }} />
+                <ThumbsUp className="w-5 h-5" style={{ color: colors.success }} />
               </div>
               <span className="text-xs font-medium text-green-500 flex items-center gap-1">
                 <Check className="w-3 h-3" />
@@ -2554,9 +3237,9 @@ const ClearingAgentDashboard = () => {
               {containerStats.accepted}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Accepted
+              Accepted / Processing
             </p>
-            {containerStatusFilter === 'Accepted' && (
+            {activeTab === 'accepted' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
                 ✓ Active
               </span>
@@ -2566,23 +3249,15 @@ const ClearingAgentDashboard = () => {
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerStatusFilter === 'Refer' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerStatusFilter === 'Refer' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              if (containerStatusFilter === 'Refer') {
-                setContainerStatusFilter('all');
-              } else {
-                setContainerStatusFilter('Refer');
-                setContainerFilter('all');
-              }
-            }}
+            } ${activeTab === 'referred' ? 'ring-1' : 'ring-1 ring-transparent'}`}
+            style={{ ringColor: activeTab === 'referred' ? colors.primary : 'transparent' }}
+            onClick={() => handleTabChange('referred')}
           >
             <div className="flex items-center justify-between">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.info + '20' }}>
-                <AlertCircle className="w-5 h-5" style={{ color: colors.info }} />
+              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primary + '20' }}>
+                <AlertCircle className="w-5 h-5" style={{ color: colors.primary }} />
               </div>
-              <span className="text-xs font-medium text-blue-500 flex items-center gap-1">
+              <span className="text-xs font-medium text-purple-500 flex items-center gap-1">
                 <ArrowUpRight className="w-3 h-3" />
                 {containerStats.referred}
               </span>
@@ -2593,7 +3268,7 @@ const ClearingAgentDashboard = () => {
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
               Referred
             </p>
-            {containerStatusFilter === 'Refer' && (
+            {activeTab === 'referred' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
                 ✓ Active
               </span>
@@ -2603,54 +3278,9 @@ const ClearingAgentDashboard = () => {
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerFilter === 'At Port' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerFilter === 'At Port' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              if (containerFilter === 'At Port') {
-                setContainerFilter('all');
-              } else {
-                setContainerFilter('At Port');
-                setContainerStatusFilter('all');
-              }
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.warning + '20' }}>
-                <Anchor className="w-5 h-5" style={{ color: colors.warning }} />
-              </div>
-              <span className="text-xs font-medium text-yellow-500 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                {containerStats.atPort}
-              </span>
-            </div>
-            <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.atPort}
-            </h3>
-            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              At Port
-            </p>
-            {containerFilter === 'At Port' && (
-              <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active
-              </span>
-            )}
-          </div>
-
-          <div 
-            className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
-              isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerFilter === 'Cleared' ? 'ring-1' : 'ring-1 ring-transparent'}`}
-            style={{ ringColor: containerFilter === 'Cleared' ? colors.primary : 'transparent' }}
-            onClick={() => {
-              setCurrentPage(1);
-              if (containerFilter === 'Cleared') {
-                setContainerFilter('all');
-              } else {
-                setContainerFilter('Cleared');
-                setContainerStatusFilter('all');
-              }
-            }}
+            } ${activeTab === 'processed' ? 'ring-1' : 'ring-1 ring-transparent'}`}
+            style={{ ringColor: activeTab === 'processed' ? colors.primary : 'transparent' }}
+            onClick={() => handleTabChange('processed')}
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.success + '20' }}>
@@ -2658,16 +3288,45 @@ const ClearingAgentDashboard = () => {
               </div>
               <span className="text-xs font-medium text-green-500 flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" />
-                {containerStats.cleared}
+                {containerStats.processed}
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.cleared}
+              {containerStats.processed}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Cleared
+              Processed / Completed
             </p>
-            {containerFilter === 'Cleared' && (
+            {activeTab === 'processed' && (
+              <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
+                ✓ Active
+              </span>
+            )}
+          </div>
+
+          <div 
+            className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
+              isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+            } ${activeTab === 'declined' ? 'ring-1' : 'ring-1 ring-transparent'}`}
+            style={{ ringColor: activeTab === 'declined' ? colors.primary : 'transparent' }}
+            onClick={() => handleTabChange('declined')}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.danger + '20' }}>
+                <ThumbsDown className="w-5 h-5" style={{ color: colors.danger }} />
+              </div>
+              <span className="text-xs font-medium text-red-500 flex items-center gap-1">
+                <X className="w-3 h-3" />
+                {containerStats.declined}
+              </span>
+            </div>
+            <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {containerStats.declined}
+            </h3>
+            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Declined / Cancelled
+            </p>
+            {activeTab === 'declined' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
                 ✓ Active
               </span>
@@ -2685,9 +3344,13 @@ const ClearingAgentDashboard = () => {
               <div className="flex flex-col gap-3 mb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Anchor className="w-5 h-5" style={{ color: colors.primary }} />
+                    <ClipboardList className="w-5 h-5" style={{ color: colors.primary }} />
                     <h2 className={`text-lg md:text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      My Requests
+                      {activeTab === 'new' && 'New Requests'}
+                      {activeTab === 'accepted' && 'Accepted / Processing'}
+                      {activeTab === 'referred' && 'Referred Requests'}
+                      {activeTab === 'processed' && 'Processed / Completed'}
+                      {activeTab === 'declined' && 'Declined / Cancelled'}
                     </h2>
                     <span
                       className="text-xs px-2 py-1 rounded-full"
@@ -2698,7 +3361,7 @@ const ClearingAgentDashboard = () => {
                     >
                       {filteredContainers.length}
                     </span>
-                    {(containerFilter !== 'all' || containerStatusFilter !== 'all') && (
+                    {containerSearch && (
                       <span 
                         className="text-xs px-2 py-1 rounded-full cursor-pointer hover:opacity-80"
                         style={{ 
@@ -2706,12 +3369,11 @@ const ClearingAgentDashboard = () => {
                           color: colors.danger
                         }}
                         onClick={() => {
-                          setContainerFilter('all');
-                          setContainerStatusFilter('all');
+                          setContainerSearch('');
                           setCurrentPage(1);
                         }}
                       >
-                        ✕ Clear Filters
+                        ✕ Clear Search
                       </span>
                     )}
                   </div>
@@ -2753,11 +3415,11 @@ const ClearingAgentDashboard = () => {
 
                 {/* Filter Row */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 min-w-[100px] max-w-[180px]">
+                  <div className="relative flex-1 min-w-[100px] max-w-[200px]">
                     <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 ${isDark ? 'text-gray-400' : 'text-gray-400'}`} />
                     <input
                       type="text"
-                      placeholder="Search..."
+                      placeholder="Search by container, client..."
                       value={containerSearch}
                       onChange={(e) => setContainerSearch(e.target.value)}
                       className={`w-full pl-8 pr-3 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
@@ -2768,36 +3430,6 @@ const ClearingAgentDashboard = () => {
                   </div>
 
                   <select
-                    value={containerFilter}
-                    onChange={(e) => setContainerFilter(e.target.value)}
-                    className={`px-2 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
-                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                  >
-                    <option value="all">Status</option>
-                    <option value="At Port">At Port</option>
-                    <option value="In Transit">In Transit</option>
-                    <option value="Cleared">Cleared</option>
-                  </select>
-
-                  <select
-                    value={containerStatusFilter}
-                    onChange={(e) => setContainerStatusFilter(e.target.value)}
-                    className={`px-2 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
-                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                  >
-                    <option value="all">Assignment</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Accepted">Accepted</option>
-                    <option value="Refer">Refer</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-
-                  <select
                     value={containerSortBy}
                     onChange={(e) => setContainerSortBy(e.target.value)}
                     className={`px-2 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
@@ -2805,195 +3437,22 @@ const ClearingAgentDashboard = () => {
                     }`}
                     style={{ focusRingColor: colors.primary }}
                   >
-                    <option value="date-desc">Latest</option>
-                    <option value="date-asc">Oldest</option>
-                    <option value="days-desc">Most Days</option>
-                    <option value="status">Status</option>
+                    <option value="date-desc">Latest First</option>
+                    <option value="date-asc">Oldest First</option>
+                    <option value="packages-desc">Most Packages</option>
+                    <option value="days-desc">Most Days in Port</option>
+                    <option value="status">By Status</option>
+                    <option value="progress-desc">Highest Progress</option>
                   </select>
                 </div>
               </div>
 
-              {/* Container View */}
+              {/* Container View - Responsive */}
               {filteredContainers.length > 0 ? (
-                containerViewMode === 'list' ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[900px]">
-                      <thead>
-                        <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Container
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Importer
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Assigned
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Status
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Transit
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            ETA
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Payment
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentContainers.map((container) => {
-                          const transitInfo = getTransitStatusDisplay(container);
-                          return (
-                            <React.Fragment key={container.id}>
-                              <tr
-                                className={`border-b cursor-pointer transition-colors ${
-                                  isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'
-                                } ${expandedContainerId === container.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
-                                onClick={() => toggleContainerExpand(container.id)}
-                                data-container-id={container.id}
-                              >
-                                <td className="py-2 px-2">
-                                  <div className="flex items-center gap-1">
-                                    <Anchor className="w-3 h-3" style={{ color: colors.primary }} />
-                                    <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                      {container.id}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    {container.importer.substring(0, 15)}{container.importer.length > 15 ? '...' : ''}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    {container.assignmentDate || 'N/A'}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full`}
-                                    style={{
-                                      backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
-                                      color: getAssignmentStatusColor(container.assignmentStatus)
-                                    }}>
-                                    {container.assignmentStatus}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1`}
-                                    style={{
-                                      backgroundColor: transitInfo.color + '20',
-                                      color: transitInfo.color
-                                    }}>
-                                    {transitInfo.icon}
-                                    {container.transitStatus === 'At Port' ? `${container.daysInPort || 0}d` : 
-                                     container.transitStatus === 'At Sea' ? `${container.daysInTransit || 0}d` : 
-                                     'Delivered'}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    {container.expectedArrivalDate || container.eta}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full`}
-                                    style={{
-                                      backgroundColor: container.paymentStatus === 'Paid' ? colors.success + '20' : colors.warning + '20',
-                                      color: container.paymentStatus === 'Paid' ? colors.success : colors.warning
-                                    }}>
-                                    {container.paymentStatus}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2">
-                                  <div className="flex items-center gap-0.5">
-                                    <button
-                                      className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                      style={{ color: colors.primary }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        toggleContainerExpand(container.id);
-                                      }}
-                                      title="View"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </button>
-                                    {container.assignmentStatus === 'Pending' && (
-                                      <>
-                                        <button
-                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                          style={{ color: colors.success }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleAssignmentAction(container, 'accept');
-                                          }}
-                                          title="Accept"
-                                        >
-                                          <Check className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                          style={{ color: colors.danger }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleAssignmentAction(container, 'reject');
-                                          }}
-                                          title="Reject"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                          style={{ color: colors.info }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleAssignmentAction(container, 'refer');
-                                          }}
-                                          title="Refer"
-                                        >
-                                          <AlertCircle className="w-3.5 h-3.5" />
-                                        </button>
-                                      </>
-                                    )}
-                                    {container.assignmentStatus === 'Accepted' && container.paymentStatus === 'Pending' && (
-                                      <button
-                                        className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                        style={{ color: colors.primary }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleSendBill(container);
-                                        }}
-                                        title="Send Bill"
-                                      >
-                                        <Send className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    <button
-                                      className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                      style={{ color: colors.primary }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handlePrint(container);
-                                      }}
-                                      title="Print"
-                                    >
-                                      <Printer className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                              {renderExpandedContainer(container)}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                <>
+                  {/* Mobile: Card View (visible on small screens) */}
+                  <div className="block md:hidden">
+                    {currentContainers.map((container) => renderResponsiveCard(container))}
                     <Pagination
                       currentPage={currentPage}
                       totalPages={totalPages}
@@ -3005,26 +3464,302 @@ const ClearingAgentDashboard = () => {
                       }}
                     />
                   </div>
-                ) : (
-                  <>
-                    {renderGridView()}
-                    <Pagination
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      onPageChange={goToPage}
-                      itemsPerPage={itemsPerPage}
-                      onItemsPerPageChange={(val) => {
-                        setItemsPerPage(val);
-                        setCurrentPage(1);
-                      }}
-                    />
-                  </>
-                )
+
+                  {/* Tablet/Desktop: Table View (hidden on mobile) */}
+                  <div className="hidden md:block">
+                    {containerViewMode === 'list' ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[900px]">
+                          <thead>
+                            <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Date Received
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Container
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Client
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Status
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Progress
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                SLA
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Transit
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                ETA
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Payment
+                              </th>
+                              <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {currentContainers.map((container) => {
+                              const transitInfo = getTransitStatusDisplay(container);
+                              return (
+                                <React.Fragment key={container.id}>
+                                  <tr
+                                    className={`border-b cursor-pointer transition-colors ${
+                                      isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'
+                                    } ${expandedContainerId === container.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
+                                    onClick={() => toggleContainerExpand(container.id)}
+                                    data-container-id={container.id}
+                                  >
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        {container.dateReceived || container.assignmentDate || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <div className="flex items-center gap-1">
+                                        <Anchor className="w-3 h-3" style={{ color: colors.primary }} />
+                                        <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                          {container.id}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        {container.client.substring(0, 15)}{container.client.length > 15 ? '...' : ''}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 flex items-center gap-1`}
+                                        style={{
+                                          backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
+                                          color: getAssignmentStatusColor(container.assignmentStatus)
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleUpdateStatus(container);
+                                        }}
+                                        title="Click to update status">
+                                        <Edit className="w-2.5 h-2.5" />
+                                        {container.assignmentStatus}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <div className="flex items-center gap-1">
+                                        <Gauge className="w-3 h-3" style={{ color: getAgentProgressColor(container.myProgress || 0) }} />
+                                        <span className={`text-xs font-medium`}
+                                          style={{ color: getAgentProgressColor(container.myProgress || 0) }}>
+                                          {container.myProgress || 0}%
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 cursor-pointer hover:opacity-80`}
+                                        style={{
+                                          backgroundColor: getSLAStatusColor(container.slaStatus) + '20',
+                                          color: getSLAStatusColor(container.slaStatus)
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleViewSLA(container.id);
+                                        }}
+                                        title="Click to view SLA">
+                                        <ShieldCheck className="w-2.5 h-2.5" />
+                                        {container.slaStatus}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1`}
+                                        style={{
+                                          backgroundColor: transitInfo.color + '20',
+                                          color: transitInfo.color
+                                        }}>
+                                        {transitInfo.icon}
+                                        {container.transitStatus === 'At Port' ? `${container.daysInPort || 0}d` : 
+                                         container.transitStatus === 'At Sea' ? `${container.daysInTransit || 0}d` : 
+                                         'Delivered'}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        {container.expectedArrivalDate || container.eta}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full`}
+                                        style={{
+                                          backgroundColor: container.paymentStatus === 'Paid' ? colors.success + '20' : colors.warning + '20',
+                                          color: container.paymentStatus === 'Paid' ? colors.success : colors.warning
+                                        }}>
+                                        {container.paymentStatus}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <div className="flex items-center gap-0.5 flex-wrap">
+                                        {/* <button
+                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
+                                          style={{ color: colors.primary }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleContainerExpand(container.id);
+                                          }}
+                                          title="View Details"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                        </button> */}
+                                        {container.assignmentStatus === 'New Request' && (
+                                          <>
+                                            <button
+                                              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                              style={{ color: colors.success }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAssignmentAction(container, 'accept');
+                                              }}
+                                              title="Accept Request"
+                                            >
+                                              <ThumbsUp className="w-3 h-3" />
+                                              Accept
+                                            </button>
+                                            <button
+                                              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                              style={{ color: colors.danger }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAssignmentAction(container, 'reject');
+                                              }}
+                                              title="Decline Request"
+                                            >
+                                              <ThumbsDown className="w-3 h-3" />
+                                              Decline
+                                            </button>
+                                            <button
+                                              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                              style={{ color: colors.info }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAssignmentAction(container, 'refer');
+                                              }}
+                                              title="Refer Request"
+                                            >
+                                              <AlertCircle className="w-3 h-3" />
+                                              Refer
+                                            </button>
+                                            {/* <button
+                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
+                                          style={{ color: colors.primary }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleContainerExpand(container.id);
+                                          }}
+                                          title="View Details"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                        </button> */}
+                                          </>
+                                        )}
+                                        {container.assignmentStatus === 'Accepted' && (
+                                          <>
+                                            <button
+                                              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                              style={{ color: colors.primary }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSendBill(container);
+                                              }}
+                                              title="Send Bill"
+                                            >
+                                              <Send className="w-3 h-3" />
+                                              Bill
+                                            </button>
+                                            <button
+                                              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                              style={{ color: colors.warning }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleUpdateStatus(container);
+                                              }}
+                                              title="Update Status"
+                                            >
+                                              <Edit className="w-3 h-3" />
+                                              Status
+                                            </button>
+                                          </>
+                                        )}
+                                        {(container.assignmentStatus === 'Processing' || 
+                                          container.assignmentStatus === 'Referred' || 
+                                          container.assignmentStatus === 'Cleared') && (
+                                          <button
+                                            className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-0.5 text-[10px] font-medium"
+                                            style={{ color: colors.warning }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleUpdateStatus(container);
+                                            }}
+                                            title="Update Status"
+                                          >
+                                            <Edit className="w-3 h-3" />
+                                            Status
+                                          </button>
+                                        )}
+                                        <button
+                                          className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
+                                          style={{ color: colors.primary }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePrint(container);
+                                          }}
+                                          title="Print"
+                                        >
+                                          <Printer className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {renderExpandedContainer(container)}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={goToPage}
+                          itemsPerPage={itemsPerPage}
+                          onItemsPerPageChange={(val) => {
+                            setItemsPerPage(val);
+                            setCurrentPage(1);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        {renderGridView()}
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={goToPage}
+                          itemsPerPage={itemsPerPage}
+                          onItemsPerPageChange={(val) => {
+                            setItemsPerPage(val);
+                            setCurrentPage(1);
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <Anchor className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium">No assignments found</p>
-                  <p className="text-xs">Try adjusting your filters</p>
+                  <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm font-medium">No {activeTab.replace('-', ' ')} requests found</p>
+                  <p className="text-xs">Try adjusting your search or filters</p>
                   <button
                     onClick={resetContainerFilters}
                     className="mt-3 px-4 py-2 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
@@ -3246,7 +3981,9 @@ const ClearingAgentDashboard = () => {
       {/* Modals */}
       {showActionModal && <ActionModal />}
       {showBillModal && <BillModal />}
+      {showStatusModal && <StatusUpdateModal />}
       {showPrintModal && <PrintModal />}
+      {showSLAModal && <SLAModal />}
     </div>
   );
 };

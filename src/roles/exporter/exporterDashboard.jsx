@@ -82,7 +82,14 @@ import {
   Warehouse,
   TrendingUp,
   TrendingDown,
-  DollarSign as DollarIcon
+  DollarSign as DollarIcon,
+  Plane,
+  Car,
+  Train,
+  Plus,
+  Save,
+  X as XIcon,
+  ChevronUp,
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
@@ -90,14 +97,13 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const ExporterDashboard = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState(null);
-  const [expandedContainerId, setExpandedContainerId] = useState(null);
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [containerViewMode, setContainerViewMode] = useState('list');
-  const [expandedPackageId, setExpandedPackageId] = useState(null);
   const [expandedPackingListId, setExpandedPackingListId] = useState(null);
   
   // Pagination states
@@ -110,23 +116,35 @@ const ExporterDashboard = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const datePickerRef = useRef(null);
   
   // Container view states
   const [containerFilter, setContainerFilter] = useState('all');
   const [containerSearch, setContainerSearch] = useState('');
-  const [containerBuyerFilter, setContainerBuyerFilter] = useState('all');
-  const [containerAgentFilter, setContainerAgentFilter] = useState('all');
+  const [containerCustomerFilter, setContainerCustomerFilter] = useState('all');
+  const [containerTransportFilter, setContainerTransportFilter] = useState('all');
   const [containerSortBy, setContainerSortBy] = useState('date-desc');
-  const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
-  const [showAssignTransporterModal, setShowAssignTransporterModal] = useState(false);
-  const [selectedContainerForAssignment, setSelectedContainerForAssignment] = useState(null);
-  const [assignmentType, setAssignmentType] = useState('agent');
   const [expandedContainerTab, setExpandedContainerTab] = useState('info');
-  const [showActionMenu, setShowActionMenu] = useState(null);
   const [documentFilter, setDocumentFilter] = useState('all');
+  
+  // Status update modal
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedOrderForStatus, setSelectedOrderForStatus] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const [customStatusInput, setCustomStatusInput] = useState('');
+  const [showCustomStatusInput, setShowCustomStatusInput] = useState(false);
+  
+  // Predefined status options for exporter
+  const [exporterStatusOptions, setExporterStatusOptions] = useState([
+    'Order Confirmed',
+    'Ready for Shipping',
+    'Awaiting Confirmation',
+    'Forwarded for Verification',
+    'Shipped',
+    'Delivered',
+    'On Hold',
+    'Cancelled'
+  ]);
 
   // Alert filter states
   const [alertStatusFilter, setAlertStatusFilter] = useState('all');
@@ -136,7 +154,7 @@ const ExporterDashboard = () => {
 
   // Print modal states
   const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printContainer, setPrintContainer] = useState(null);
+  const [printOrder, setPrintOrder] = useState(null);
   const [printOptions, setPrintOptions] = useState({
     packingLists: false,
     documents: false,
@@ -146,27 +164,23 @@ const ExporterDashboard = () => {
     selectedDocument: null
   });
 
-  // Transporter tracking states
-  const [showTransporterTracking, setShowTransporterTracking] = useState(false);
-  const [trackingContainer, setTrackingContainer] = useState(null);
-
   // Color theme
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
 
-  // Document data for containers
-  const containerDocuments = {
+  // Document data for orders
+  const orderDocuments = {
     'EXP-001': [
       { id: 'DOC-001', name: 'Bill of Lading', type: 'pdf', status: 'uploaded', date: '2026-07-20', size: '2.4 MB' },
       { id: 'DOC-002', name: 'Commercial Invoice', type: 'pdf', status: 'uploaded', date: '2026-07-18', size: '1.8 MB' },
@@ -197,6 +211,10 @@ const ExporterDashboard = () => {
       { id: 'DOC-019', name: 'Packing List', type: 'pdf', status: 'uploaded', date: '2026-08-23', size: '0.9 MB' },
       { id: 'DOC-020', name: 'Certificate of Origin', type: 'pdf', status: 'uploaded', date: '2026-08-25', size: '1.3 MB' },
       { id: 'DOC-021', name: 'Export Declaration', type: 'pdf', status: 'pending', date: '2026-08-28', size: '3.5 MB' },
+    ],
+    'LOC-001': [
+      { id: 'DOC-022', name: 'Delivery Note', type: 'pdf', status: 'uploaded', date: '2026-09-08', size: '0.5 MB' },
+      { id: 'DOC-023', name: 'Invoice', type: 'pdf', status: 'uploaded', date: '2026-09-07', size: '0.8 MB' },
     ]
   };
 
@@ -204,7 +222,7 @@ const ExporterDashboard = () => {
   const alertsData = [
     { 
       id: 'ALT-001', 
-      containerId: 'EXP-001', 
+      orderId: 'EXP-001', 
       severity: 'high', 
       message: 'Export documentation incomplete - Certificate of Origin pending',
       date: '2026-08-10 14:30',
@@ -213,7 +231,7 @@ const ExporterDashboard = () => {
     },
     { 
       id: 'ALT-002', 
-      containerId: 'EXP-002', 
+      orderId: 'EXP-002', 
       severity: 'critical', 
       message: 'Export license expired - Renewal required immediately',
       date: '2026-08-11 09:15',
@@ -222,7 +240,7 @@ const ExporterDashboard = () => {
     },
     { 
       id: 'ALT-003', 
-      containerId: 'EXP-005', 
+      orderId: 'EXP-005', 
       severity: 'medium', 
       message: 'Port congestion - Expected delay of 2-3 days',
       date: '2026-08-09 16:45',
@@ -231,7 +249,7 @@ const ExporterDashboard = () => {
     },
     { 
       id: 'ALT-004', 
-      containerId: 'EXP-004', 
+      orderId: 'EXP-004', 
       severity: 'low', 
       message: 'Invoice discrepancy - Minor correction required',
       date: '2026-08-08 11:20',
@@ -240,16 +258,16 @@ const ExporterDashboard = () => {
     },
     { 
       id: 'ALT-005', 
-      containerId: 'EXP-003', 
+      orderId: 'EXP-003', 
       severity: 'info', 
-      message: 'Container shipped successfully - Update tracking',
+      message: 'Order shipped successfully - Update tracking',
       date: '2026-08-05 17:00',
       status: 'resolved',
       category: 'Shipping'
     },
     { 
       id: 'ALT-006', 
-      containerId: 'EXP-002', 
+      orderId: 'EXP-002', 
       severity: 'high', 
       message: 'Customs hold - Additional documentation requested',
       date: '2026-08-12 08:30',
@@ -258,41 +276,47 @@ const ExporterDashboard = () => {
     },
   ];
 
-  // Enhanced Container Data for Exporter
-  const containersData = [
+  // Order Data for Exporter (International + Local)
+  const ordersData = [
     {
       id: 'EXP-001',
-      sealNo: 'SEAL-78923',
-      serviceName: 'MV Star Express',
-      size: '40ft HC',
-      packages: 24,
-      grossWeight: '28,500 kg',
-      volume: '67.5 m³',
-      measurement: '12.2m x 2.4m x 2.9m',
-      cargoDescription: 'Premium Electronics and Circuit Components',
-      buyer: 'TechImport USA Inc',
-      consignee: {
+      orderNo: 'ORD-2026-001',
+      customer: 'TechImport USA Inc',
+      customerContact: {
         name: 'TechImport USA Inc',
         contact: '+1 555 123 4567',
         email: 'imports@techimport.com',
         address: '123 Tech Park, Silicon Valley, CA 94043'
       },
-      status: 'At Port',
-      location: 'Mombasa Port - Export Terminal',
       voyage: 'MV Star Express',
-      eta: '12 Aug 2026',
-      daysAtSea: 0,
-      assignedAgent: null,
-      assignedTransporter: null,
-      agentProgress: null,
-      agentStatus: null,
-      transporterProgress: null,
-      transporterStatus: null,
-      transporterLocation: null,
-      transporterETA: null,
-      exportValue: '$245,000.00',
+      status: 'Ready for Shipping',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-07-15', by: 'System' },
+        { status: 'Ready for Shipping', date: '2026-07-25', by: 'Exporter' },
+      ],
+      transportMode: 'Vessel',
+      transportDetails: {
+        vessel: 'MV Star Express',
+        shippingLine: 'Maersk',
+        containerNo: 'MSKU-458921',
+        sealNo: 'SEAL-78923',
+        departurePort: 'Mombasa Port',
+        arrivalPort: 'Los Angeles Port',
+        departureDate: '2026-08-15',
+        estimatedArrival: '2026-09-10',
+      },
+      exportType: 'International',
+      orderAmount: 245000000, // UGX
+      orderAmountUSD: 65000,
       paymentStatus: 'Partial',
       paymentPercentage: 60,
+      packages: 24,
+      grossWeight: '28,500 kg',
+      volume: '67.5 m³',
+      cargoDescription: 'Premium Electronics and Circuit Components',
+      location: 'Mombasa Port - Export Terminal',
+      freightForwarderStatus: 'Documentation in Progress',
+      exporterStatus: 'Ready for Shipping',
       packingLists: [
         {
           id: 'PL-001',
@@ -358,63 +382,60 @@ const ExporterDashboard = () => {
         { stage: 'Documentation submitted', date: '10 Aug 2026', completed: true },
         { stage: 'Customs inspection', date: '12 Aug 2026', completed: false },
         { stage: 'Vessel departure', date: '15 Aug 2026', completed: false },
-        { stage: 'Arrival at destination', date: '25 Aug 2026', completed: false },
+        { stage: 'Arrival at destination', date: '10 Sep 2026', completed: false },
       ],
       trackingHistory: [
-        { date: '2026-07-25 14:30', location: 'Warehouse - Nairobi', status: 'Ready for Export' },
+        { date: '2026-07-25 14:30', location: 'Warehouse - Kampala', status: 'Ready for Export' },
         { date: '2026-07-28 08:15', location: 'In Transit to Port', status: 'Transit' },
         { date: '2026-08-02 22:45', location: 'Mombasa Port - Export Terminal', status: 'Arrived' },
         { date: '2026-08-08 06:30', location: 'Mombasa Port - Customs Clearance', status: 'In Progress' }
       ],
       expectedDeparture: '2026-08-15',
-      expectedArrival: '2026-08-25',
+      expectedArrival: '2026-09-10',
       delayed: false,
       delayReason: null,
       actionRequired: 'Submit Customs Declaration'
     },
     {
       id: 'EXP-002',
-      sealNo: 'SEAL-45612',
-      serviceName: 'MV Indian Trader',
-      size: '20ft ST',
-      packages: 15,
-      grossWeight: '18,200 kg',
-      volume: '33.2 m³',
-      measurement: '6.0m x 2.4m x 2.6m',
-      cargoDescription: 'Textile Fabrics and Dyeing Agents',
-      buyer: 'Global Textiles India Pvt Ltd',
-      consignee: {
+      orderNo: 'ORD-2026-002',
+      customer: 'Global Textiles India Pvt Ltd',
+      customerContact: {
         name: 'Global Textiles India Pvt Ltd',
         contact: '+91 22 1234 5678',
         email: 'purchasing@globaltextiles.in',
         address: '456 Fabric Lane, Mumbai, India'
       },
-      status: 'At Port',
-      location: 'Mombasa Port - Export Terminal',
       voyage: 'MV Indian Trader',
-      eta: '18 Aug 2026',
-      daysAtSea: 0,
-      assignedAgent: {
-        id: 'AGT-001',
-        name: 'Swift Clearance Services',
-        email: 'info@swiftclearance.com',
-        contact: '+254 711 123456'
+      status: 'Forwarded for Verification',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-08-01', by: 'System' },
+        { status: 'Awaiting Confirmation', date: '2026-08-05', by: 'Exporter' },
+        { status: 'Forwarded for Verification', date: '2026-08-10', by: 'Exporter' },
+      ],
+      transportMode: 'Vessel',
+      transportDetails: {
+        vessel: 'MV Indian Trader',
+        shippingLine: 'MSC',
+        containerNo: 'IN-782341',
+        sealNo: 'SEAL-45612',
+        departurePort: 'Mombasa Port',
+        arrivalPort: 'Mumbai Port',
+        departureDate: '2026-08-18',
+        estimatedArrival: '2026-08-28',
       },
-      assignedTransporter: {
-        id: 'TRP-001',
-        name: 'East African Logistics',
-        email: 'dispatch@eastafricalogistics.com',
-        contact: '+256 712 345678'
-      },
-      agentProgress: 65,
-      agentStatus: 'Document Submission in Progress',
-      transporterProgress: 30,
-      transporterStatus: 'Loading at Port',
-      transporterLocation: 'Mombasa Port',
-      transporterETA: '2026-08-16 14:00',
-      exportValue: '$89,500.00',
+      exportType: 'International',
+      orderAmount: 89500000, // UGX
+      orderAmountUSD: 23800,
       paymentStatus: 'Full',
       paymentPercentage: 100,
+      packages: 15,
+      grossWeight: '18,200 kg',
+      volume: '33.2 m³',
+      cargoDescription: 'Textile Fabrics and Dyeing Agents',
+      location: 'Mombasa Port - Export Terminal',
+      freightForwarderStatus: 'Document Submission in Progress',
+      exporterStatus: 'Forwarded for Verification',
       packingLists: [
         {
           id: 'PL-004',
@@ -477,47 +498,46 @@ const ExporterDashboard = () => {
     },
     {
       id: 'EXP-003',
-      sealNo: 'SEAL-89234',
-      serviceName: 'MV African Trader',
-      size: '40ft HC',
-      packages: 18,
-      grossWeight: '32,400 kg',
-      volume: '71.8 m³',
-      measurement: '12.2m x 2.4m x 2.9m',
-      cargoDescription: 'Industrial Machinery and Spare Parts',
-      buyer: 'African Machinery Solutions',
-      consignee: {
+      orderNo: 'ORD-2026-003',
+      customer: 'African Machinery Solutions',
+      customerContact: {
         name: 'African Machinery Solutions',
         contact: '+27 11 234 5678',
         email: 'procurement@africanmachinery.co.za',
         address: '789 Industrial Park, Johannesburg, South Africa'
       },
-      status: 'Shipped',
-      location: 'At Sea - Indian Ocean',
       voyage: 'MV African Trader',
-      eta: 'Delivered 05 Aug 2026',
-      daysAtSea: 12,
-      assignedAgent: {
-        id: 'AGT-002',
-        name: 'Mombasa Port Logistics',
-        email: 'info@mombasaportlogistics.com',
-        contact: '+254 722 987654'
+      status: 'Shipped',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-07-10', by: 'System' },
+        { status: 'Ready for Shipping', date: '2026-07-20', by: 'Exporter' },
+        { status: 'Awaiting Confirmation', date: '2026-07-25', by: 'Exporter' },
+        { status: 'Forwarded for Verification', date: '2026-07-28', by: 'Exporter' },
+        { status: 'Shipped', date: '2026-08-05', by: 'System' },
+      ],
+      transportMode: 'Vessel',
+      transportDetails: {
+        vessel: 'MV African Trader',
+        shippingLine: 'CMA CGM',
+        containerNo: 'SA-456732',
+        sealNo: 'SEAL-89234',
+        departurePort: 'Mombasa Port',
+        arrivalPort: 'Durban Port',
+        departureDate: '2026-08-05',
+        estimatedArrival: '2026-08-20',
       },
-      assignedTransporter: {
-        id: 'TRP-002',
-        name: 'Trans-East Cargo Services',
-        email: 'dispatch@trans-eastcargo.com',
-        contact: '+256 703 456789'
-      },
-      agentProgress: 100,
-      agentStatus: 'Completed',
-      transporterProgress: 100,
-      transporterStatus: 'Delivered',
-      transporterLocation: 'Nairobi Warehouse',
-      transporterETA: 'Delivered',
-      exportValue: '$187,200.00',
+      exportType: 'International',
+      orderAmount: 187200000, // UGX
+      orderAmountUSD: 49800,
       paymentStatus: 'Partial',
       paymentPercentage: 75,
+      packages: 18,
+      grossWeight: '32,400 kg',
+      volume: '71.8 m³',
+      cargoDescription: 'Industrial Machinery and Spare Parts',
+      location: 'At Sea - Indian Ocean',
+      freightForwarderStatus: 'Completed',
+      exporterStatus: 'Shipped',
       packingLists: [
         {
           id: 'PL-006',
@@ -554,7 +574,7 @@ const ExporterDashboard = () => {
         { stage: 'Arrival at destination', date: '20 Aug 2026', completed: false },
       ],
       trackingHistory: [
-        { date: '2026-07-20 08:30', location: 'Warehouse - Nairobi', status: 'Ready for Export' },
+        { date: '2026-07-20 08:30', location: 'Warehouse - Kampala', status: 'Ready for Export' },
         { date: '2026-07-25 14:15', location: 'Mombasa Port - Export Terminal', status: 'Arrived' },
         { date: '2026-07-28 09:45', location: 'Mombasa Customs', status: 'Cleared' },
         { date: '2026-08-05 16:20', location: 'At Sea - Indian Ocean', status: 'Shipped' }
@@ -567,37 +587,43 @@ const ExporterDashboard = () => {
     },
     {
       id: 'EXP-004',
-      sealNo: 'SEAL-56789',
-      serviceName: 'MV Pacific Express',
-      size: '20ft ST',
-      packages: 20,
-      grossWeight: '15,800 kg',
-      volume: '33.2 m³',
-      measurement: '6.0m x 2.4m x 2.6m',
-      cargoDescription: 'Packaging Materials and Consumables',
-      buyer: 'Pacific Packaging Co.',
-      consignee: {
+      orderNo: 'ORD-2026-004',
+      customer: 'Pacific Packaging Co.',
+      customerContact: {
         name: 'Pacific Packaging Co.',
         contact: '+61 2 1234 5678',
         email: 'purchasing@pacificpackaging.com.au',
         address: '101 Packaging Way, Sydney, Australia'
       },
-      status: 'Ready',
-      location: 'Warehouse - Kampala',
       voyage: 'MV Pacific Express',
-      eta: '28 Sep 2026',
-      daysAtSea: 0,
-      assignedAgent: null,
-      assignedTransporter: null,
-      agentProgress: null,
-      agentStatus: null,
-      transporterProgress: null,
-      transporterStatus: null,
-      transporterLocation: null,
-      transporterETA: null,
-      exportValue: '$52,300.00',
+      status: 'Awaiting Confirmation',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-09-01', by: 'System' },
+        { status: 'Awaiting Confirmation', date: '2026-09-05', by: 'Exporter' },
+      ],
+      transportMode: 'Vessel',
+      transportDetails: {
+        vessel: 'MV Pacific Express',
+        shippingLine: 'Hapag-Lloyd',
+        containerNo: 'PK-893421',
+        sealNo: 'SEAL-56789',
+        departurePort: 'Mombasa Port',
+        arrivalPort: 'Sydney Port',
+        departureDate: '2026-09-25',
+        estimatedArrival: '2026-10-15',
+      },
+      exportType: 'International',
+      orderAmount: 52300000, // UGX
+      orderAmountUSD: 13900,
       paymentStatus: 'Deposit',
       paymentPercentage: 30,
+      packages: 20,
+      grossWeight: '15,800 kg',
+      volume: '33.2 m³',
+      cargoDescription: 'Packaging Materials and Consumables',
+      location: 'Warehouse - Kampala',
+      freightForwarderStatus: 'Awaiting Documentation',
+      exporterStatus: 'Awaiting Confirmation',
       packingLists: [
         {
           id: 'PL-007',
@@ -630,60 +656,56 @@ const ExporterDashboard = () => {
         { stage: 'Documentation submitted', date: '15 Sep 2026', completed: false },
         { stage: 'Customs inspection', date: '20 Sep 2026', completed: false },
         { stage: 'Vessel departure', date: '25 Sep 2026', completed: false },
-        { stage: 'Arrival at destination', date: '28 Sep 2026', completed: false },
+        { stage: 'Arrival at destination', date: '15 Oct 2026', completed: false },
       ],
       trackingHistory: [
         { date: '2026-09-05 06:00', location: 'Warehouse - Kampala', status: 'Ready for Export' }
       ],
       expectedDeparture: '2026-09-25',
-      expectedArrival: '2026-10-05',
+      expectedArrival: '2026-10-15',
       delayed: false,
       delayReason: null,
       actionRequired: 'Prepare customs documentation'
     },
     {
       id: 'EXP-005',
-      sealNo: 'SEAL-34126',
-      serviceName: 'MV Europe Trader',
-      size: '40ft HC',
-      packages: 22,
-      grossWeight: '26,700 kg',
-      volume: '67.5 m³',
-      measurement: '12.2m x 2.4m x 2.9m',
-      cargoDescription: 'Automotive Components and Accessories',
-      buyer: 'AutoParts Europe GmbH',
-      consignee: {
+      orderNo: 'ORD-2026-005',
+      customer: 'AutoParts Europe GmbH',
+      customerContact: {
         name: 'AutoParts Europe GmbH',
         contact: '+49 30 1234 5678',
         email: 'purchasing@autoparts.de',
         address: '789 Auto Strasse, Berlin, Germany'
       },
-      status: 'At Port',
-      location: 'Mombasa Port - Export Terminal',
       voyage: 'MV Europe Trader',
-      eta: '15 Sep 2026',
-      daysAtSea: 0,
-      assignedAgent: {
-        id: 'AGT-003',
-        name: 'East Africa Customs Solutions',
-        email: 'info@eastafricacustoms.com',
-        contact: '+254 733 112233'
+      status: 'Ready for Shipping',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-08-20', by: 'System' },
+        { status: 'Ready for Shipping', date: '2026-08-25', by: 'Exporter' },
+      ],
+      transportMode: 'Vessel',
+      transportDetails: {
+        vessel: 'MV Europe Trader',
+        shippingLine: 'Maersk',
+        containerNo: 'DE-782341',
+        sealNo: 'SEAL-34126',
+        departurePort: 'Mombasa Port',
+        arrivalPort: 'Hamburg Port',
+        departureDate: '2026-09-15',
+        estimatedArrival: '2026-10-05',
       },
-      assignedTransporter: {
-        id: 'TRP-003',
-        name: 'Kampala Freight Forwarders',
-        email: 'info@kampalafreight.com',
-        contact: '+256 701 234567'
-      },
-      agentProgress: 40,
-      agentStatus: 'Document Review',
-      transporterProgress: 10,
-      transporterStatus: 'Awaiting Customs Clearance',
-      transporterLocation: 'Mombasa Port - Export Terminal',
-      transporterETA: '2026-09-18 09:00',
-      exportValue: '$156,800.00',
+      exportType: 'International',
+      orderAmount: 156800000, // UGX
+      orderAmountUSD: 41700,
       paymentStatus: 'Partial',
       paymentPercentage: 50,
+      packages: 22,
+      grossWeight: '26,700 kg',
+      volume: '67.5 m³',
+      cargoDescription: 'Automotive Components and Accessories',
+      location: 'Mombasa Port - Export Terminal',
+      freightForwarderStatus: 'Document Review',
+      exporterStatus: 'Ready for Shipping',
       packingLists: [
         {
           id: 'PL-008',
@@ -732,7 +754,7 @@ const ExporterDashboard = () => {
         { stage: 'Documentation submitted', date: '10 Sep 2026', completed: true },
         { stage: 'Customs inspection', date: '12 Sep 2026', completed: false },
         { stage: 'Vessel departure', date: '15 Sep 2026', completed: false },
-        { stage: 'Arrival at destination', date: '30 Sep 2026', completed: false },
+        { stage: 'Arrival at destination', date: '05 Oct 2026', completed: false },
       ],
       trackingHistory: [
         { date: '2026-08-25 14:00', location: 'Warehouse - Kampala', status: 'Ready for Export' },
@@ -741,25 +763,105 @@ const ExporterDashboard = () => {
         { date: '2026-09-10 09:45', location: 'Mombasa Port - Customs Clearance', status: 'In Progress' }
       ],
       expectedDeparture: '2026-09-15',
-      expectedArrival: '2026-09-30',
+      expectedArrival: '2026-10-05',
       delayed: true,
       delayReason: 'Port congestion - 3 day delay',
       actionRequired: 'Contact shipping line for updated ETA'
+    },
+    // Local Order
+    {
+      id: 'LOC-001',
+      orderNo: 'ORD-2026-006',
+      customer: 'Kampala Distributors Ltd',
+      customerContact: {
+        name: 'Kampala Distributors Ltd',
+        contact: '+256 701 234567',
+        email: 'info@kampaladistributors.ug',
+        address: 'Plot 10, Nakasero Road, Kampala'
+      },
+      voyage: 'Truck Transport',
+      status: 'Shipped',
+      statusHistory: [
+        { status: 'Order Confirmed', date: '2026-09-01', by: 'System' },
+        { status: 'Ready for Shipping', date: '2026-09-05', by: 'Exporter' },
+        { status: 'Shipped', date: '2026-09-08', by: 'Exporter' },
+      ],
+      transportMode: 'Truck',
+      transportDetails: {
+        truckNo: 'UBK 1234',
+        driverName: 'John Mukasa',
+        driverContact: '+256 712 345678',
+        departureLocation: 'Warehouse - Kampala',
+        deliveryLocation: 'Kampala City Center',
+        departureDate: '2026-09-08',
+        estimatedArrival: '2026-09-08',
+      },
+      exportType: 'Local',
+      orderAmount: 12500000, // UGX
+      orderAmountUSD: 0,
+      paymentStatus: 'Full',
+      paymentPercentage: 100,
+      packages: 10,
+      grossWeight: '2,500 kg',
+      volume: '15.0 m³',
+      cargoDescription: 'Assorted Consumer Goods',
+      location: 'In Transit - Kampala',
+      freightForwarderStatus: 'N/A',
+      exporterStatus: 'Shipped',
+      packingLists: [
+        {
+          id: 'PL-010',
+          name: 'Packing List - Consumer Goods',
+          packages: [
+            {
+              id: 'PKG-015',
+              name: 'Electronics Package',
+              quantity: 5,
+              items: [
+                { name: 'TV Sets', quantity: 10, unit: 'pieces' },
+                { name: 'Sound Systems', quantity: 8, unit: 'pieces' }
+              ]
+            },
+            {
+              id: 'PKG-016',
+              name: 'Household Items Package',
+              quantity: 5,
+              items: [
+                { name: 'Kitchen Appliances', quantity: 15, unit: 'pieces' },
+                { name: 'Cleaning Supplies', quantity: 20, unit: 'pieces' }
+              ]
+            }
+          ]
+        }
+      ],
+      milestones: [
+        { stage: 'Order confirmed', date: '01 Sep 2026', completed: true },
+        { stage: 'Goods ready for delivery', date: '05 Sep 2026', completed: true },
+        { stage: 'In Transit', date: '08 Sep 2026', completed: true },
+        { stage: 'Delivered', date: '08 Sep 2026', completed: false },
+      ],
+      trackingHistory: [
+        { date: '2026-09-05 14:00', location: 'Warehouse - Kampala', status: 'Ready for Delivery' },
+        { date: '2026-09-08 09:00', location: 'In Transit - Kampala', status: 'Transit' }
+      ],
+      expectedDeparture: '2026-09-08',
+      expectedArrival: '2026-09-08',
+      delayed: false,
+      delayReason: null,
+      actionRequired: 'Confirm delivery'
     }
   ];
 
-  // Get unique buyers for filter
-  const getUniqueBuyers = () => {
-    const buyers = containersData.map(c => c.buyer);
-    return ['all', ...new Set(buyers)];
+  // Get unique customers for filter
+  const getUniqueCustomers = () => {
+    const customers = ordersData.map(c => c.customer);
+    return ['all', ...new Set(customers)];
   };
 
-  // Get unique agents for filter
-  const getUniqueAgents = () => {
-    const agents = containersData
-      .map(c => c.assignedAgent?.name)
-      .filter(Boolean);
-    return ['all', ...new Set(agents)];
+  // Get unique transport modes for filter
+  const getUniqueTransportModes = () => {
+    const modes = ordersData.map(c => c.transportMode);
+    return ['all', ...new Set(modes)];
   };
 
   // Get unique alert categories
@@ -778,10 +880,26 @@ const ExporterDashboard = () => {
   const getStatusColor = (status) => {
     switch(status) {
       case 'Shipped': return colors.success;
-      case 'At Port': return colors.warning;
-      case 'Ready': return colors.info;
+      case 'Ready for Shipping': return colors.info;
+      case 'Awaiting Confirmation': return colors.warning;
+      case 'Forwarded for Verification': return colors.primary;
       case 'Delivered': return colors.success;
+      case 'On Hold': return colors.danger;
+      case 'Cancelled': return colors.danger;
+      case 'Order Confirmed': return colors.info;
       default: return colors.info;
+    }
+  };
+
+  // Get transport mode icon
+  const getTransportModeIcon = (mode) => {
+    switch(mode) {
+      case 'Vessel': return <Ship className="w-4 h-4" />;
+      case 'Plane': return <Plane className="w-4 h-4" />;
+      case 'Truck': return <Truck className="w-4 h-4" />;
+      case 'Car': return <Car className="w-4 h-4" />;
+      case 'Train': return <Train className="w-4 h-4" />;
+      default: return <Ship className="w-4 h-4" />;
     }
   };
 
@@ -817,14 +935,6 @@ const ExporterDashboard = () => {
     }
   };
 
-  // Get agent progress color
-  const getAgentProgressColor = (progress) => {
-    if (progress === null) return colors.info;
-    if (progress >= 80) return colors.success;
-    if (progress >= 50) return colors.warning;
-    return colors.danger;
-  };
-
   // Get payment status color
   const getPaymentStatusColor = (status) => {
     switch(status) {
@@ -836,8 +946,18 @@ const ExporterDashboard = () => {
     }
   };
 
-  // Get status badge for container timeline
-  const getContainerStatusInfo = (container) => {
+  // Format currency in UGX
+  const formatUGX = (amount) => {
+    return new Intl.NumberFormat('en-UG', {
+      style: 'currency',
+      currency: 'UGX',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Get status badge for order timeline
+  const getOrderStatusInfo = (order) => {
     const info = {
       label: '',
       color: '',
@@ -845,30 +965,54 @@ const ExporterDashboard = () => {
       action: ''
     };
 
-    switch(container.status) {
-      case 'Ready':
-        info.label = `Ready for Export - Awaiting Documents`;
+    switch(order.status) {
+      case 'Ready for Shipping':
+        info.label = `Ready for Shipping - Awaiting Documents`;
         info.color = colors.info;
         info.icon = <Package className="w-4 h-4" />;
-        info.action = container.actionRequired || 'Prepare shipping documents';
+        info.action = order.actionRequired || 'Prepare shipping documents';
         break;
-      case 'At Port':
-        info.label = `At Port - ${container.location}`;
+      case 'Awaiting Confirmation':
+        info.label = `Awaiting Confirmation from ${order.customer}`;
         info.color = colors.warning;
-        info.icon = <Anchor className="w-4 h-4" />;
-        info.action = container.actionRequired || 'Submit customs documentation';
+        info.icon = <Clock className="w-4 h-4" />;
+        info.action = order.actionRequired || 'Follow up with customer';
+        break;
+      case 'Forwarded for Verification':
+        info.label = `Forwarded for Verification - ${order.location}`;
+        info.color = colors.primary;
+        info.icon = <FileCheck className="w-4 h-4" />;
+        info.action = order.actionRequired || 'Submit customs documentation';
         break;
       case 'Shipped':
-        info.label = `In Transit - Expected Arrival: ${container.expectedArrival}`;
-        info.color = colors.primary;
+        info.label = `Shipped - Expected Arrival: ${order.expectedArrival}`;
+        info.color = colors.success;
         info.icon = <Ship className="w-4 h-4" />;
-        info.action = container.actionRequired || 'Monitor vessel progress';
+        info.action = order.actionRequired || 'Monitor shipping progress';
         break;
       case 'Delivered':
-        info.label = `Delivered to: ${container.consignee.name}`;
+        info.label = `Delivered to: ${order.customer}`;
         info.color = colors.success;
         info.icon = <CheckCircle className="w-4 h-4" />;
-        info.action = container.actionRequired || 'Release final documents';
+        info.action = order.actionRequired || 'Release final documents';
+        break;
+      case 'Order Confirmed':
+        info.label = `Order Confirmed - Processing`;
+        info.color = colors.info;
+        info.icon = <CheckSquare className="w-4 h-4" />;
+        info.action = order.actionRequired || 'Prepare for shipping';
+        break;
+      case 'On Hold':
+        info.label = `On Hold - Pending Action`;
+        info.color = colors.danger;
+        info.icon = <AlertCircle className="w-4 h-4" />;
+        info.action = order.actionRequired || 'Review hold reason';
+        break;
+      case 'Cancelled':
+        info.label = `Cancelled`;
+        info.color = colors.danger;
+        info.icon = <XCircle className="w-4 h-4" />;
+        info.action = 'No action required';
         break;
       default:
         info.label = 'Status Unknown';
@@ -877,31 +1021,31 @@ const ExporterDashboard = () => {
         info.action = 'Check status';
     }
 
-    if (container.delayed) {
-      info.label = `⚠️ DELAYED: ${container.delayReason}`;
+    if (order.delayed) {
+      info.label = `⚠️ DELAYED: ${order.delayReason}`;
       info.color = colors.danger;
     }
 
     return info;
   };
 
-  // Filtered containers with multiple filters
-  const getFilteredContainers = () => {
-    let filtered = [...containersData];
+  // Filtered orders with multiple filters
+  const getFilteredOrders = () => {
+    let filtered = [...ordersData];
     
     // Status filter
     if (containerFilter !== 'all') {
       filtered = filtered.filter(c => c.status === containerFilter);
     }
     
-    // Buyer filter
-    if (containerBuyerFilter !== 'all') {
-      filtered = filtered.filter(c => c.buyer === containerBuyerFilter);
+    // Customer filter
+    if (containerCustomerFilter !== 'all') {
+      filtered = filtered.filter(c => c.customer === containerCustomerFilter);
     }
     
-    // Agent filter
-    if (containerAgentFilter !== 'all') {
-      filtered = filtered.filter(c => c.assignedAgent?.name === containerAgentFilter);
+    // Transport mode filter
+    if (containerTransportFilter !== 'all') {
+      filtered = filtered.filter(c => c.transportMode === containerTransportFilter);
     }
     
     // Search filter
@@ -909,29 +1053,26 @@ const ExporterDashboard = () => {
       const search = containerSearch.toLowerCase();
       filtered = filtered.filter(c => 
         c.id.toLowerCase().includes(search) ||
-        c.sealNo.toLowerCase().includes(search) ||
+        c.orderNo.toLowerCase().includes(search) ||
         c.voyage.toLowerCase().includes(search) ||
         c.cargoDescription.toLowerCase().includes(search) ||
-        c.buyer.toLowerCase().includes(search)
+        c.customer.toLowerCase().includes(search)
       );
     }
     
     // Sort
     switch(containerSortBy) {
       case 'date-desc':
-        filtered.sort((a, b) => new Date(b.eta) - new Date(a.eta));
+        filtered.sort((a, b) => new Date(b.expectedDeparture) - new Date(a.expectedDeparture));
         break;
       case 'date-asc':
-        filtered.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+        filtered.sort((a, b) => new Date(a.expectedDeparture) - new Date(b.expectedDeparture));
         break;
-      case 'packages-desc':
-        filtered.sort((a, b) => b.packages - a.packages);
+      case 'amount-desc':
+        filtered.sort((a, b) => b.orderAmount - a.orderAmount);
         break;
-      case 'packages-asc':
-        filtered.sort((a, b) => a.packages - b.packages);
-        break;
-      case 'value-desc':
-        filtered.sort((a, b) => parseFloat(b.exportValue.replace(/[^0-9.-]+/g, '')) - parseFloat(a.exportValue.replace(/[^0-9.-]+/g, '')));
+      case 'amount-asc':
+        filtered.sort((a, b) => a.orderAmount - b.orderAmount);
         break;
       case 'status':
         filtered.sort((a, b) => a.status.localeCompare(b.status));
@@ -943,7 +1084,7 @@ const ExporterDashboard = () => {
     return filtered;
   };
 
-  const filteredContainers = getFilteredContainers();
+  const filteredOrders = getFilteredOrders();
 
   // Filtered alerts
   const getFilteredAlerts = () => {
@@ -965,7 +1106,7 @@ const ExporterDashboard = () => {
       const search = alertSearch.toLowerCase();
       filtered = filtered.filter(a => 
         a.message.toLowerCase().includes(search) ||
-        a.containerId.toLowerCase().includes(search) ||
+        a.orderId.toLowerCase().includes(search) ||
         a.category.toLowerCase().includes(search)
       );
     }
@@ -975,11 +1116,11 @@ const ExporterDashboard = () => {
 
   const filteredAlerts = getFilteredAlerts();
 
-  // Pagination for containers
+  // Pagination for orders
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentContainers = filteredContainers.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredContainers.length / itemsPerPage);
+  const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
   // Pagination for alerts
   const indexOfLastAlert = alertsPage * alertsPerPage;
@@ -988,69 +1129,71 @@ const ExporterDashboard = () => {
   const totalAlertPages = Math.ceil(filteredAlerts.length / alertsPerPage);
 
   // Stats
-  const containerStats = {
-    total: containersData.length,
-    ready: containersData.filter(c => c.status === 'Ready').length,
-    atPort: containersData.filter(c => c.status === 'At Port').length,
-    shipped: containersData.filter(c => c.status === 'Shipped').length,
-    delivered: containersData.filter(c => c.status === 'Delivered').length,
-    totalValue: containersData.reduce((sum, c) => sum + parseFloat(c.exportValue.replace(/[^0-9.-]+/g, '')), 0)
+  const orderStats = {
+    total: ordersData.length,
+    ready: ordersData.filter(c => c.status === 'Ready for Shipping').length,
+    awaiting: ordersData.filter(c => c.status === 'Awaiting Confirmation').length,
+    forwarded: ordersData.filter(c => c.status === 'Forwarded for Verification').length,
+    shipped: ordersData.filter(c => c.status === 'Shipped').length,
+    delivered: ordersData.filter(c => c.status === 'Delivered').length,
+    onHold: ordersData.filter(c => c.status === 'On Hold').length,
+    totalValue: ordersData.reduce((sum, c) => sum + c.orderAmount, 0)
   };
 
-  // Available agents for assignment
-  const availableAgents = [
-    { id: 'AGT-001', name: 'Swift Clearance Services', email: 'info@swiftclearance.com', contact: '+254 711 123456' },
-    { id: 'AGT-002', name: 'Mombasa Port Logistics', email: 'info@mombasaportlogistics.com', contact: '+254 722 987654' },
-    { id: 'AGT-003', name: 'East Africa Customs Solutions', email: 'info@eastafricacustoms.com', contact: '+254 733 112233' },
-    { id: 'AGT-004', name: 'KPA Licensed Clearing Agents', email: 'agents@kpa.go.ke', contact: '+254 744 556677' }
-  ];
-
-  const availableTransporters = [
-    { id: 'TRP-001', name: 'East African Logistics', email: 'dispatch@eastafricalogistics.com', contact: '+256 712 345678' },
-    { id: 'TRP-002', name: 'Trans-East Cargo Services', email: 'dispatch@trans-eastcargo.com', contact: '+256 703 456789' },
-    { id: 'TRP-003', name: 'Kampala Freight Forwarders', email: 'info@kampalafreight.com', contact: '+256 701 234567' },
-    { id: 'TRP-004', name: 'Mombasa-Nairobi Haulage', email: 'dispatch@mombasanairobi.com', contact: '+254 700 123456' }
-  ];
-
-  // Handle container toggle expand
-  const toggleContainerExpand = (containerId) => {
-    setExpandedContainerId(expandedContainerId === containerId ? null : containerId);
+  // Handle order toggle expand
+  const toggleOrderExpand = (orderId) => {
+    setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
     setExpandedContainerTab('info');
   };
 
-  // Handle assign agent
-  const handleAssignAgent = (container, agent) => {
-    const updatedContainers = containersData.map(c => {
-      if (c.id === container.id) {
-        return { ...c, assignedAgent: agent, agentProgress: 0, agentStatus: 'Assigned' };
-      }
-      return c;
-    });
-    setShowAssignAgentModal(false);
-    setShowActionMenu(null);
+  // Handle status update
+  const handleStatusUpdate = (orderId, newStatus, note) => {
+    const order = ordersData.find(c => c.id === orderId);
+    if (order) {
+      order.status = newStatus;
+      order.exporterStatus = newStatus;
+      order.statusHistory.push({
+        status: newStatus,
+        date: new Date().toISOString().split('T')[0],
+        by: 'Exporter',
+        note: note || ''
+      });
+      
+      // Update the local state
+      const updatedOrders = ordersData.map(c => {
+        if (c.id === orderId) {
+          return { ...order };
+        }
+        return c;
+      });
+      // Since we're using a const array, we need to update it
+      // In a real app, this would be an API call
+      Object.assign(ordersData, updatedOrders);
+    }
+    setShowStatusModal(false);
+    setSelectedOrderForStatus(null);
+    setNewStatus('');
+    setStatusNote('');
   };
 
-  // Handle assign transporter
-  const handleAssignTransporter = (container, transporter) => {
-    const updatedContainers = containersData.map(c => {
-      if (c.id === container.id) {
-        return { ...c, assignedTransporter: transporter, transporterProgress: 0, transporterStatus: 'Assigned' };
-      }
-      return c;
-    });
-    setShowAssignTransporterModal(false);
-    setShowActionMenu(null);
+  // Handle adding custom status
+  const handleAddCustomStatus = () => {
+    if (customStatusInput.trim() && !exporterStatusOptions.includes(customStatusInput.trim())) {
+      setExporterStatusOptions([...exporterStatusOptions, customStatusInput.trim()]);
+      setNewStatus(customStatusInput.trim());
+      setCustomStatusInput('');
+      setShowCustomStatusInput(false);
+    }
   };
 
-  // Handle container actions
-  const handleContainerAction = (action, container) => {
-    console.log(`Action: ${action} on container ${container.id}`);
-    setShowActionMenu(null);
-  };
-
-  // Handle view document
-  const handleViewDocument = (doc) => {
-    window.open(`/documents/${doc.id}`, '_blank');
+  // Open status modal
+  const openStatusModal = (order) => {
+    setSelectedOrderForStatus(order);
+    setNewStatus(order.status);
+    setStatusNote('');
+    setShowCustomStatusInput(false);
+    setCustomStatusInput('');
+    setShowStatusModal(true);
   };
 
   // Handle page change
@@ -1067,8 +1210,8 @@ const ExporterDashboard = () => {
   };
 
   // Handle print
-  const handlePrint = (container) => {
-    setPrintContainer(container);
+  const handlePrint = (order) => {
+    setPrintOrder(order);
     setPrintOptions({
       packingLists: false,
       documents: false,
@@ -1086,17 +1229,11 @@ const ExporterDashboard = () => {
     window.print();
   };
 
-  // Handle transporter tracking
-  const handleTrackTransporter = (container) => {
-    setTrackingContainer(container);
-    setShowTransporterTracking(true);
-  };
-
   // Reset filters
   const resetContainerFilters = () => {
     setContainerFilter('all');
-    setContainerBuyerFilter('all');
-    setContainerAgentFilter('all');
+    setContainerCustomerFilter('all');
+    setContainerTransportFilter('all');
     setContainerSearch('');
     setContainerSortBy('date-desc');
     setCurrentPage(1);
@@ -1110,26 +1247,9 @@ const ExporterDashboard = () => {
     setAlertsPage(1);
   };
 
-  // Handle quick assign transporter from action
-  const handleQuickAssignTransporter = (container) => {
-    setSelectedContainerForAssignment(container);
-    setAssignmentType('transporter');
-    setShowAssignTransporterModal(true);
-  };
-
-  // Handle quick assign agent from action
-  const handleQuickAssignAgent = (container) => {
-    setSelectedContainerForAssignment(container);
-    setAssignmentType('agent');
-    setShowAssignAgentModal(true);
-  };
-
   // Handle card click to filter by status
   const handleCardClick = (status) => {
-    // Reset to first page when filtering
     setCurrentPage(1);
-    
-    // If clicking the same status, deselect it (show all)
     if (containerFilter === status) {
       setContainerFilter('all');
     } else {
@@ -1139,9 +1259,9 @@ const ExporterDashboard = () => {
 
   // Render Print Modal
   const PrintModal = () => {
-    if (!showPrintModal || !printContainer) return null;
+    if (!showPrintModal || !printOrder) return null;
 
-    const docs = containerDocuments[printContainer.id] || [];
+    const docs = orderDocuments[printOrder.id] || [];
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
@@ -1154,7 +1274,7 @@ const ExporterDashboard = () => {
             <div className="flex items-center gap-3">
               <Printer className="w-5 h-5" style={{ color: colors.primary }} />
               <h3 className="font-bold text-gray-900 dark:text-white">
-                Print Options - {printContainer.id}
+                Print Options - {printOrder.orderNo}
               </h3>
             </div>
             <button
@@ -1189,7 +1309,7 @@ const ExporterDashboard = () => {
                       All Packing Lists
                     </span>
                   </label>
-                  {printContainer.packingLists.map((pl) => (
+                  {printOrder.packingLists.map((pl) => (
                     <label key={pl.id} className="flex items-center gap-2 cursor-pointer ml-6">
                       <input
                         type="checkbox"
@@ -1278,277 +1398,154 @@ const ExporterDashboard = () => {
     );
   };
 
-  // Render Transporter Tracking Modal
-  const TransporterTrackingModal = () => {
-    if (!showTransporterTracking || !trackingContainer) return null;
-    if (!trackingContainer.assignedTransporter) {
-      return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
-             onClick={() => setShowTransporterTracking(false)}>
-          <div className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800 p-6 text-center">
-            <Truck className="w-12 h-12 mx-auto mb-3" style={{ color: colors.primary }} />
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              No Transporter Assigned
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Please assign a transporter to track their progress.
-            </p>
-            <button
-              onClick={() => {
-                setShowTransporterTracking(false);
-                handleQuickAssignTransporter(trackingContainer);
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-              style={{ backgroundColor: colors.primary }}
-            >
-              Assign Transporter Now
-            </button>
-            <button
-              onClick={() => setShowTransporterTracking(false)}
-              className="ml-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      );
-    }
+  // Render Status Update Modal
+  const StatusUpdateModal = () => {
+    if (!showStatusModal || !selectedOrderForStatus) return null;
 
-    const progress = trackingContainer.transporterProgress || 0;
-    const status = trackingContainer.transporterStatus || 'Not Started';
-    const location = trackingContainer.transporterLocation || 'Unknown';
-    const eta = trackingContainer.transporterETA || 'Not Available';
+    const availableStatuses = [...exporterStatusOptions];
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
-           onClick={() => setShowTransporterTracking(false)}>
-        <div 
-          className="w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Truck className="w-5 h-5" style={{ color: colors.primary }} />
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-white">
-                  Transporter Tracking - {trackingContainer.id}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {trackingContainer.assignedTransporter.name}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowTransporterTracking(false)}
-              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="p-4 max-h-[70vh] overflow-y-auto">
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Transport Progress
-                </span>
-                <span className="text-sm font-bold" style={{ color: getAgentProgressColor(progress) }}>
-                  {progress}%
-                </span>
-              </div>
-              <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="h-full rounded-full transition-all duration-1000"
-                  style={{ 
-                    width: `${progress}%`,
-                    backgroundColor: getAgentProgressColor(progress)
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
-                <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  {status}
-                </p>
-              </div>
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Current Location</p>
-                <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  {location}
-                </p>
-              </div>
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Estimated Arrival</p>
-                <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  {eta}
-                </p>
-              </div>
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Transporter</p>
-                <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  {trackingContainer.assignedTransporter.name}
-                </p>
-              </div>
-            </div>
-
-            <div className={`p-4 rounded-lg border-2 border-dashed text-center ${
-              isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-gray-50'
-            }`}>
-              <div className="flex items-center justify-center mb-3">
-                <Compass className="w-8 h-8" style={{ color: colors.primary }} />
-                <Route className="w-8 h-8 ml-2" style={{ color: colors.primaryLight }} />
-              </div>
-              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Live Location Tracking
-              </p>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {location}
-              </p>
-              <div className="mt-2 flex items-center justify-center gap-4 text-xs">
-                <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  🟢 Last Updated: 2 min ago
-                </span>
-                <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  📍 Accuracy: High
-                </span>
-              </div>
-              <button
-                className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-                style={{ backgroundColor: colors.primary }}
-                onClick={() => window.open('https://www.google.com/maps', '_blank')}
-              >
-                <Map className="w-4 h-4 inline mr-2" />
-                Open Full Map View
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Transport Milestones
-              </h4>
-              <div className="space-y-2">
-                {[
-                  { stage: 'Pickup from Warehouse', completed: progress >= 20 },
-                  { stage: 'In Transit to Port', completed: progress >= 40 },
-                  { stage: 'Arrived at Port', completed: progress >= 60 },
-                  { stage: 'Loading on Vessel', completed: progress >= 80 },
-                  { stage: 'Vessel Departed', completed: progress >= 100 },
-                ].map((milestone, idx) => (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="relative flex items-center justify-center w-5">
-                      {milestone.completed ? (
-                        <CheckCircle className="w-4 h-4" style={{ color: colors.success }} />
-                      ) : (
-                        <Clock className="w-4 h-4" style={{ color: colors.warning }} />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm ${milestone.completed ? 'line-through' : ''} ${
-                        isDark ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
-                        {milestone.stage}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Need to contact the transporter?
-              </p>
-              <div className="flex items-center gap-3 mt-2">
-                <button
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.primary }}
-                  onClick={() => window.location.href = `tel:${trackingContainer.assignedTransporter.contact}`}
-                >
-                  <Phone className="w-3 h-3" />
-                  Call
-                </button>
-                <button
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.primary }}
-                  onClick={() => window.location.href = `mailto:${trackingContainer.assignedTransporter.email}`}
-                >
-                  <Mail className="w-3 h-3" />
-                  Email
-                </button>
-                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {trackingContainer.assignedTransporter.contact}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Render Assign Agent Modal
-  const AssignAgentModal = () => {
-    if (!showAssignAgentModal || !selectedContainerForAssignment) return null;
-
-    const options = assignmentType === 'agent' ? availableAgents : availableTransporters;
-    const title = assignmentType === 'agent' ? 'Assign Clearing Agent' : 'Assign Inland Transporter';
-    const icon = assignmentType === 'agent' ? <User className="w-5 h-5" /> : <Truck className="w-5 h-5" />;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
-           onClick={() => setShowAssignAgentModal(false)}>
+           onClick={() => setShowStatusModal(false)}>
         <div 
           className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {icon}
+              <Edit className="w-5 h-5" style={{ color: colors.primary }} />
               <h3 className="font-bold text-gray-900 dark:text-white">
-                {title}
+                Update Status - {selectedOrderForStatus.orderNo}
               </h3>
             </div>
             <button
-              onClick={() => setShowAssignAgentModal(false)}
+              onClick={() => setShowStatusModal(false)}
               className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-4 max-h-96 overflow-y-auto">
-            <p className="text-sm mb-4 text-gray-500 dark:text-gray-400">
-              Select a {assignmentType === 'agent' ? 'clearing agent' : 'transporter'} for Container {selectedContainerForAssignment.id}
+          <div className="p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Current Status: <span className="font-medium" style={{ color: getStatusColor(selectedOrderForStatus.status) }}>
+                {selectedOrderForStatus.status}
+              </span>
             </p>
-            <div className="space-y-2">
-              {options.map((option) => (
-                <div key={option.id} className="p-3 rounded-lg flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer"
-                onClick={() => {
-                  if (assignmentType === 'agent') {
-                    handleAssignAgent(selectedContainerForAssignment, option);
-                  } else {
-                    handleAssignTransporter(selectedContainerForAssignment, option);
-                  }
-                }}>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {option.name}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {option.email}
-                    </p>
-                  </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Select New Status
+              </label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {availableStatuses.map((status) => (
                   <button
-                    className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                    style={{ backgroundColor: colors.primary }}
+                    key={status}
+                    onClick={() => setNewStatus(status)}
+                    className={`w-full px-3 py-2 rounded-lg text-sm text-left transition-all duration-200 ${
+                      newStatus === status
+                        ? 'ring-2 bg-opacity-20'
+                        : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                    }`}
+                    style={{
+                      backgroundColor: newStatus === status ? getStatusColor(status) + '20' : 'transparent',
+                      ringColor: getStatusColor(status),
+                      color: isDark ? '#fff' : '#111827'
+                    }}
                   >
-                    Select
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getStatusColor(status) }} />
+                      <span>{status}</span>
+                      {newStatus === status && <CheckCircle className="w-4 h-4 ml-auto" style={{ color: getStatusColor(status) }} />}
+                    </div>
                   </button>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              {/* Add Custom Status */}
+              <div className="mt-3">
+                {!showCustomStatusInput ? (
+                  <button
+                    onClick={() => setShowCustomStatusInput(true)}
+                    className="text-sm flex items-center gap-1 transition-colors hover:opacity-80"
+                    style={{ color: colors.primary }}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Custom Status
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customStatusInput}
+                      onChange={(e) => setCustomStatusInput(e.target.value)}
+                      placeholder="Enter custom status..."
+                      className={`flex-1 px-3 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                        isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      style={{ focusRingColor: colors.primary }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddCustomStatus();
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={handleAddCustomStatus}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Save className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCustomStatusInput(false);
+                        setCustomStatusInput('');
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      style={{ color: colors.danger }}
+                    >
+                      <XIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Note (Optional)
+              </label>
+              <textarea
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+                placeholder="Add a note about this status update..."
+                className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 resize-none ${
+                  isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleStatusUpdate(selectedOrderForStatus.id, newStatus, statusNote)}
+                disabled={!newStatus}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 ${
+                  !newStatus ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                }`}
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Save className="w-4 h-4 inline mr-2" />
+                Update Status
+              </button>
             </div>
           </div>
         </div>
@@ -1557,8 +1554,8 @@ const ExporterDashboard = () => {
   };
 
   // Render documents tab content
-  const renderDocumentsTab = (container) => {
-    const docs = containerDocuments[container.id] || [];
+  const renderDocumentsTab = (order) => {
+    const docs = orderDocuments[order.id] || [];
     const filteredDocs = documentFilter === 'all' ? docs : docs.filter(d => d.status === documentFilter);
 
     return (
@@ -1677,53 +1674,60 @@ const ExporterDashboard = () => {
     );
   };
 
-  // Render expanded container details
-  const renderExpandedContainer = (container) => {
-    const isExpanded = expandedContainerId === container.id;
+  // Handle view document
+  const handleViewDocument = (doc) => {
+    window.open(`/documents/${doc.id}`, '_blank');
+  };
+
+  // Render expanded order details
+  const renderExpandedOrder = (order) => {
+    const isExpanded = expandedOrderId === order.id;
     if (!isExpanded) return null;
 
     const tabs = [
-      { id: 'info', label: 'Container Info', icon: Info },
+      { id: 'info', label: 'Order Info', icon: Info },
       { id: 'packing', label: 'Packing List', icon: Package },
       { id: 'documents', label: 'Documents', icon: FileText },
       { id: 'tracking', label: 'Tracking', icon: Map },
-      { id: 'assign', label: 'Assign', icon: UserPlus }
+      { id: 'transport', label: 'Transport', icon: Truck }
     ];
 
-    const statusInfo = getContainerStatusInfo(container);
+    const statusInfo = getOrderStatusInfo(order);
+    const TransportIcon = getTransportModeIcon(order.transportMode);
 
     return (
       <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <td colSpan="10" className="p-0">
+        <td colSpan="8" className="p-0">
           <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
             {/* Status Banner */}
             <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2 ${
-              container.delayed ? 'bg-red-100 dark:bg-red-900/30 border border-red-500' : ''
+              order.delayed ? 'bg-red-100 dark:bg-red-900/30 border border-red-500' : ''
             }`} style={{
-              backgroundColor: container.delayed ? undefined : `${statusInfo.color}20`,
-              borderColor: container.delayed ? colors.danger : statusInfo.color
+              backgroundColor: order.delayed ? undefined : `${statusInfo.color}20`,
+              borderColor: order.delayed ? colors.danger : statusInfo.color
             }}>
               <div className="flex items-center gap-3">
-                <span style={{ color: container.delayed ? colors.danger : statusInfo.color }}>
+                <span style={{ color: order.delayed ? colors.danger : statusInfo.color }}>
                   {statusInfo.icon}
                 </span>
                 <div>
                   <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     {statusInfo.label}
                   </p>
-                  {container.delayed && (
+                  {order.delayed && (
                     <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                      Delay Reason: {container.delayReason}
+                      Delay Reason: {order.delayReason}
                     </p>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-1 rounded-full`} style={{
+                <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1`} style={{
                   backgroundColor: statusInfo.color + '20',
                   color: statusInfo.color
                 }}>
-                  {container.status}
+                  {TransportIcon}
+                  {order.status}
                 </span>
                 <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Action: {statusInfo.action}
@@ -1757,274 +1761,149 @@ const ExporterDashboard = () => {
             <div className="space-y-4">
               {expandedContainerTab === 'info' && (
                 <div className="space-y-4">
-                  {/* Container Info Grid */}
+                  {/* Order Info Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Container No.</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.id}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Order No.</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.orderNo}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal No.</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNo}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Customer</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.customer}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Service Name</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.voyage}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Export Type</p>
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
+                        style={{
+                          backgroundColor: order.exportType === 'International' ? colors.primary + '20' : colors.success + '20',
+                          color: order.exportType === 'International' ? colors.primary : colors.success
+                        }}>
+                        {order.exportType === 'International' ? <Globe className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
+                        {order.exportType}
+                      </span>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.size}</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Voyage</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.voyage}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Transport Mode</p>
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
+                        style={{
+                          backgroundColor: colors.primary + '20',
+                          color: colors.primary
+                        }}>
+                        {TransportIcon}
+                        {order.transportMode}
+                      </span>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Packages</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.packages}</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.packages}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gross Weight</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.grossWeight}</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.grossWeight}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.volume}</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.volume}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Measurement</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.measurement}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
-                        style={{ 
-                          backgroundColor: getStatusColor(container.status) + '20',
-                          color: getStatusColor(container.status)
-                        }}>
-                        {container.status === 'Delivered' && <CheckCircle className="w-3 h-3" />}
-                        {container.status === 'Shipped' && <Ship className="w-3 h-3" />}
-                        {container.status === 'At Port' && <Anchor className="w-3 h-3" />}
-                        {container.status === 'Ready' && <Package className="w-3 h-3" />}
-                        {container.status}
-                      </span>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Location</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{order.location}</p>
                     </div>
                   </div>
 
-                  {/* Export Value & Payment Status */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Order Amount & Payment Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Export Value</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Order Amount</p>
                       <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.exportValue}
+                        {formatUGX(order.orderAmount)}
+                        {order.orderAmountUSD > 0 && (
+                          <span className="text-xs font-normal ml-2 text-gray-500">
+                            (~${order.orderAmountUSD.toLocaleString()})
+                          </span>
+                        )}
                       </p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Payment Status</p>
                       <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
                         style={{
-                          backgroundColor: getPaymentStatusColor(container.paymentStatus) + '20',
-                          color: getPaymentStatusColor(container.paymentStatus)
+                          backgroundColor: getPaymentStatusColor(order.paymentStatus) + '20',
+                          color: getPaymentStatusColor(order.paymentStatus)
                         }}>
-                        {container.paymentStatus}
-                        {container.paymentPercentage > 0 && ` (${container.paymentPercentage}%)`}
+                        {order.paymentStatus}
+                        {order.paymentPercentage > 0 && ` (${order.paymentPercentage}%)`}
                       </span>
                     </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Buyer</p>
-                      <p className={`font-medium text-sm truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.buyer}
-                      </p>
-                    </div>
                   </div>
 
-                  {/* ETA/ETD Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expected Departure</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.expectedDeparture || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expected Arrival</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.expectedArrival || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Buyer Info */}
+                  {/* Customer Contact Details */}
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Buyer</p>
-                    <p className={`font-medium text-sm mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {container.buyer}
-                    </p>
+                    <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Customer Contact Details
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 text-sm">
+                        <User className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                          {order.customerContact.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <Mail className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                          {order.customerContact.email}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <Phone className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                          {order.customerContact.contact}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <Building className="w-4 h-4" style={{ color: colors.primary }} />
+                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                          {order.customerContact.address}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Cargo Description */}
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Cargo Description</p>
                     <p className={`font-medium text-sm mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {container.cargoDescription}
+                      {order.cargoDescription}
                     </p>
                   </div>
 
-                  {/* Consignee Contact Details */}
+                  {/* Status History */}
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                     <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Consignee Contact Details
+                      Status History
                     </h4>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-sm">
-                        <User className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Mail className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.email}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Phone className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.contact}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Building className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.address}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Assigned Agent & Transporter */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        <User className="w-4 h-4" style={{ color: colors.primary }} />
-                        Assigned Clearing Agent
-                      </h4>
-                      {container.assignedAgent ? (
-                        <div className="space-y-2">
-                          <div>
-                            <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {container.assignedAgent.name}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {container.assignedAgent.email}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {container.assignedAgent.contact}
-                            </p>
+                      {order.statusHistory.map((history, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getStatusColor(history.status) }} />
+                            <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                              {history.status}
+                            </span>
+                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                              by {history.by}
+                            </span>
                           </div>
-                          {container.agentProgress !== null && (
-                            <div>
-                              <div className="flex justify-between items-center text-xs">
-                                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                                  Progress: {container.agentProgress}%
-                                </span>
-                                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                  {container.agentStatus}
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                                <div 
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{ 
-                                    width: `${container.agentProgress}%`,
-                                    backgroundColor: getAgentProgressColor(container.agentProgress)
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
+                          <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            {history.date}
+                          </span>
                         </div>
-                      ) : (
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          No agent assigned
-                        </p>
-                      )}
-                      <button
-                        onClick={() => handleQuickAssignAgent(container)}
-                        className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        {container.assignedAgent ? 'Change Agent' : 'Assign Agent'}
-                      </button>
-                    </div>
-
-                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        <Truck className="w-4 h-4" style={{ color: colors.primary }} />
-                        Assigned Inland Transporter
-                      </h4>
-                      {container.assignedTransporter ? (
-                        <div className="space-y-2">
-                          <div>
-                            <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {container.assignedTransporter.name}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {container.assignedTransporter.email}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {container.assignedTransporter.contact}
-                            </p>
-                          </div>
-                          {container.transporterProgress !== null && (
-                            <div>
-                              <div className="flex justify-between items-center text-xs">
-                                <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                                  Transport Progress: {container.transporterProgress}%
-                                </span>
-                                <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                  {container.transporterStatus}
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                                <div 
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{ 
-                                    width: `${container.transporterProgress}%`,
-                                    backgroundColor: getAgentProgressColor(container.transporterProgress)
-                                  }}
-                                />
-                              </div>
-                              <div className="flex items-center gap-2 mt-2">
-                                <MapPin className="w-3 h-3" style={{ color: colors.primary }} />
-                                <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                  {container.transporterLocation || 'Location unknown'}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          No transporter assigned
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        <button
-                          onClick={() => handleQuickAssignTransporter(container)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                          style={{ backgroundColor: colors.primary }}
-                        >
-                          {container.assignedTransporter ? 'Change Transporter' : 'Assign Transporter'}
-                        </button>
-                        {container.assignedTransporter && (
-                          <button
-                            onClick={() => handleTrackTransporter(container)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.info }}
-                          >
-                            <Map className="w-3 h-3 inline mr-1" />
-                            Track
-                          </button>
-                        )}
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -2034,10 +1913,10 @@ const ExporterDashboard = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Packing Lists ({container.packingLists.length})
+                      Packing Lists ({order.packingLists.length})
                     </h3>
                     <button
-                      onClick={() => handlePrint(container)}
+                      onClick={() => handlePrint(order)}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
                       style={{ backgroundColor: colors.primary }}
                     >
@@ -2046,7 +1925,7 @@ const ExporterDashboard = () => {
                     </button>
                   </div>
 
-                  {container.packingLists.map((packingList) => (
+                  {order.packingLists.map((packingList) => (
                     <div key={packingList.id} className={`border rounded-lg overflow-hidden ${
                       isDark ? 'border-gray-700' : 'border-gray-200'
                     }`}>
@@ -2073,7 +1952,7 @@ const ExporterDashboard = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setPrintContainer(container);
+                              setPrintOrder(order);
                               setPrintOptions({
                                 packingLists: true,
                                 documents: false,
@@ -2130,7 +2009,7 @@ const ExporterDashboard = () => {
                 </div>
               )}
 
-              {expandedContainerTab === 'documents' && renderDocumentsTab(container)}
+              {expandedContainerTab === 'documents' && renderDocumentsTab(order)}
 
               {expandedContainerTab === 'tracking' && (
                 <div className="space-y-4">
@@ -2138,11 +2017,11 @@ const ExporterDashboard = () => {
                     <div className="flex items-center gap-2">
                       <Map className="w-5 h-5" style={{ color: colors.primary }} />
                       <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Container Tracking
+                        Order Tracking
                       </h3>
                     </div>
                     <button
-                      onClick={() => handlePrint(container)}
+                      onClick={() => handlePrint(order)}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
                       style={{ backgroundColor: colors.primary }}
                     >
@@ -2156,10 +2035,10 @@ const ExporterDashboard = () => {
                   }`}>
                     <Navigation className="w-12 h-12 mx-auto mb-3" style={{ color: colors.primary }} />
                     <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Map View - Container {container.id}
+                      Map View - Order {order.orderNo}
                     </p>
                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Current Location: {container.location}
+                      Current Location: {order.location}
                     </p>
                     <button
                       className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
@@ -2174,7 +2053,7 @@ const ExporterDashboard = () => {
                       Shipment Milestones
                     </h4>
                     <div className="space-y-3">
-                      {container.milestones.map((milestone, idx) => (
+                      {order.milestones.map((milestone, idx) => (
                         <div key={idx} className="flex items-start gap-3">
                           <div className="relative flex items-center justify-center w-6">
                             {milestone.completed ? (
@@ -2182,7 +2061,7 @@ const ExporterDashboard = () => {
                             ) : (
                               <Clock className="w-4 h-4" style={{ color: colors.warning }} />
                             )}
-                            {idx < container.milestones.length - 1 && (
+                            {idx < order.milestones.length - 1 && (
                               <div className={`absolute top-6 w-0.5 h-8 ${
                                 milestone.completed ? 'bg-green-500' : 'bg-gray-300'
                               }`}></div>
@@ -2208,7 +2087,7 @@ const ExporterDashboard = () => {
                       Tracking History
                     </h4>
                     <div className="space-y-2">
-                      {container.trackingHistory.map((track, idx) => (
+                      {order.trackingHistory.map((track, idx) => (
                         <div key={idx} className={`p-3 rounded-lg flex items-center justify-between ${
                           isDark ? 'bg-gray-700' : 'bg-white'
                         }`}>
@@ -2227,164 +2106,124 @@ const ExporterDashboard = () => {
                       ))}
                     </div>
                   </div>
-
-                  {container.assignedTransporter && (
-                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        <Truck className="w-4 h-4" style={{ color: colors.primary }} />
-                        Transporter Status
-                      </h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.assignedTransporter.name}
-                          </span>
-                          <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {container.transporterStatus || 'Awaiting'}
-                          </span>
-                        </div>
-                        {container.transporterProgress !== null && (
-                          <div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                                Progress
-                              </span>
-                              <span className={isDark ? 'text-white' : 'text-gray-900'}>
-                                {container.transporterProgress}%
-                              </span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                              <div 
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{ 
-                                  width: `${container.transporterProgress}%`,
-                                  backgroundColor: getAgentProgressColor(container.transporterProgress)
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => handleTrackTransporter(container)}
-                          className="w-full mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-1"
-                          style={{ backgroundColor: colors.info }}
-                        >
-                          <Map className="w-3 h-3" />
-                          Track Transporter Location
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {expandedContainerTab === 'assign' && (
+              {expandedContainerTab === 'transport' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <h4 className={`font-medium text-sm mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        <User className="w-4 h-4" style={{ color: colors.primary }} />
-                        Assign Clearing Agent
-                      </h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {availableAgents.map((agent) => (
-                          <div key={agent.id} className={`p-3 rounded-lg flex items-center justify-between ${
-                            isDark ? 'bg-gray-800' : 'bg-gray-50'
-                          }`}>
-                            <div>
-                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {agent.name}
-                              </p>
-                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                {agent.email}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleAssignAgent(container, agent)}
-                              className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                              style={{ backgroundColor: colors.primary }}
-                            >
-                              Assign
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2`}>
-                          Or assign by email:
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="email"
-                            placeholder="agent@email.com"
-                            className={`flex-1 px-3 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                              isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
-                            }`}
-                            style={{ focusRingColor: colors.primary }}
-                          />
-                          <button
-                            className="px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.primary }}
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    {getTransportModeIcon(order.transportMode)}
+                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Transport Details - {order.transportMode}
+                    </h3>
+                  </div>
 
-                    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <h4 className={`font-medium text-sm mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        <Truck className="w-4 h-4" style={{ color: colors.primary }} />
-                        Assign Inland Transporter
-                      </h4>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {availableTransporters.map((transporter) => (
-                          <div key={transporter.id} className={`p-3 rounded-lg flex items-center justify-between ${
-                            isDark ? 'bg-gray-800' : 'bg-gray-50'
-                          }`}>
-                            <div>
-                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {transporter.name}
-                              </p>
-                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                {transporter.email}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleAssignTransporter(container, transporter)}
-                              className="px-3 py-1 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                              style={{ backgroundColor: colors.primary }}
-                            >
-                              Assign
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2`}>
-                          Or assign by email:
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            type="email"
-                            placeholder="transporter@email.com"
-                            className={`flex-1 px-3 py-1.5 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                              isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900'
-                            }`}
-                            style={{ focusRingColor: colors.primary }}
-                          />
-                          <button
-                            className="px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.primary }}
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {order.transportMode === 'Vessel' && (
+                      <>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Vessel</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.vessel}
+                          </p>
                         </div>
-                      </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Shipping Line</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.shippingLine}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Container No.</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.containerNo}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal No.</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.sealNo}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                    {order.transportMode === 'Truck' && (
+                      <>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Truck No.</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.truckNo}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Driver</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.driverName}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Driver Contact</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.driverContact}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                    {order.transportMode === 'Plane' && (
+                      <>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Flight No.</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.flightNo || 'N/A'}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Airline</p>
+                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {order.transportDetails.airline || 'N/A'}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Departure Location</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {order.transportDetails.departurePort || order.transportDetails.departureLocation || 'N/A'}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Arrival Location</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {order.transportDetails.arrivalPort || order.transportDetails.deliveryLocation || 'N/A'}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Departure Date</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {order.transportDetails.departureDate || 'N/A'}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Estimated Arrival</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {order.transportDetails.estimatedArrival || 'N/A'}
+                      </p>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Collapse Arrow at Bottom */}
+            <div className="mt-4 pt-3 border-t flex justify-center" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+              <button
+                onClick={() => toggleOrderExpand(order.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+                style={{ color: colors.primary }}
+              >
+                <ChevronUp className="w-4 h-4" />
+                <span className="text-xs font-medium">Hide Details</span>
+              </button>
             </div>
           </div>
         </td>
@@ -2396,91 +2235,97 @@ const ExporterDashboard = () => {
   const renderGridView = () => {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {currentContainers.map((container) => {
-          const statusInfo = getContainerStatusInfo(container);
+        {currentOrders.map((order) => {
+          const statusInfo = getOrderStatusInfo(order);
+          const TransportIcon = getTransportModeIcon(order.transportMode);
           return (
-            <div key={container.id} className={`rounded-lg transition-all duration-300 ${
+            <div key={order.id} className={`rounded-lg transition-all duration-300 ${
               isDark ? 'bg-gray-700 border border-gray-600' : 'bg-white shadow-md'
             }`}>
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Anchor className="w-4 h-4" style={{ color: colors.primary }} />
                     <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {container.id}
+                      {order.orderNo}
                     </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full`}
+                  <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1`}
                     style={{
-                      backgroundColor: getStatusColor(container.status) + '20',
-                      color: getStatusColor(container.status)
+                      backgroundColor: getStatusColor(order.status) + '20',
+                      color: getStatusColor(order.status)
                     }}>
-                    {container.status}
+                    {TransportIcon}
+                    {order.status}
                   </span>
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Seal:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.sealNo}</span>
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Customer:</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{order.customer}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Voyage:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.voyage}</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{order.voyage}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Buyer:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.buyer}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Value:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.exportValue}</span>
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Amount:</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{formatUGX(order.orderAmount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Payment:</span>
                     <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full`}
                       style={{
-                        backgroundColor: getPaymentStatusColor(container.paymentStatus) + '20',
-                        color: getPaymentStatusColor(container.paymentStatus)
+                        backgroundColor: getPaymentStatusColor(order.paymentStatus) + '20',
+                        color: getPaymentStatusColor(order.paymentStatus)
                       }}>
-                      {container.paymentStatus}
+                      {order.paymentStatus}
                     </span>
                   </div>
-                  {container.delayed && (
+                  <div className="flex justify-between">
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Type:</span>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${
+                      order.exportType === 'International' ? 'bg-purple-500/20 text-purple-500' : 'bg-green-500/20 text-green-500'
+                    }`}>
+                      {order.exportType}
+                    </span>
+                  </div>
+                  {order.delayed && (
                     <div className="flex justify-between text-red-500">
                       <span className="text-xs">⚠️ Delayed</span>
-                      <span className="text-xs">{container.delayReason}</span>
+                      <span className="text-xs">{order.delayReason}</span>
                     </div>
                   )}
                 </div>
                 <div className="mt-3 pt-3 border-t flex gap-2" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
                   <button
-                    onClick={() => toggleContainerExpand(container.id)}
+                    onClick={() => toggleOrderExpand(order.id)}
                     className="flex-1 px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
                     style={{ backgroundColor: colors.primary }}
                   >
-                    {expandedContainerId === container.id ? 'Hide Details' : 'View Details'}
+                    {expandedOrderId === order.id ? 'Hide Details' : 'View Details'}
+                  </button>
+                  <button
+                    onClick={() => openStatusModal(order)}
+                    className="px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
+                    style={{ backgroundColor: colors.warning }}
+                  >
+                    <Edit className="w-3 h-3" />
                   </button>
                 </div>
               </div>
-              {expandedContainerId === container.id && (
+              {expandedOrderId === order.id && (
                 <div className={`p-4 border-t ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
                   <div className="text-sm space-y-2">
                     <div className="flex justify-between">
                       <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Cargo:</span>
                       <span className={`text-right ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.cargoDescription}
+                        {order.cargoDescription}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Agent:</span>
+                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transport:</span>
                       <span className={isDark ? 'text-white' : 'text-gray-900'}>
-                        {container.assignedAgent?.name || 'Not Assigned'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transporter:</span>
-                      <span className={isDark ? 'text-white' : 'text-gray-900'}>
-                        {container.assignedTransporter?.name || 'Not Assigned'}
+                        {order.transportMode}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -2491,30 +2336,7 @@ const ExporterDashboard = () => {
                     </div>
                     <div className="flex flex-wrap gap-2 mt-2">
                       <button
-                        onClick={() => handleQuickAssignAgent(container)}
-                        className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        Assign Agent
-                      </button>
-                      <button
-                        onClick={() => handleQuickAssignTransporter(container)}
-                        className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        Assign Transporter
-                      </button>
-                      {container.assignedTransporter && (
-                        <button
-                          onClick={() => handleTrackTransporter(container)}
-                          className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                          style={{ backgroundColor: colors.info }}
-                        >
-                          Track
-                        </button>
-                      )}
-                      <button
-                        onClick={() => toggleContainerExpand(container.id)}
+                        onClick={() => toggleOrderExpand(order.id)}
                         className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium border transition-all duration-200 hover:opacity-90"
                         style={{ 
                           borderColor: colors.primary,
@@ -2522,6 +2344,25 @@ const ExporterDashboard = () => {
                         }}
                       >
                         Full Details
+                      </button>
+                      <button
+                        onClick={() => openStatusModal(order)}
+                        className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
+                        style={{ backgroundColor: colors.warning }}
+                      >
+                        <Edit className="w-3 h-3 inline mr-1" />
+                        Update Status
+                      </button>
+                    </div>
+                    {/* Collapse Arrow in Grid View */}
+                    <div className="flex justify-center mt-3 pt-2 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                      <button
+                        onClick={() => toggleOrderExpand(order.id)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        style={{ color: colors.primary }}
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                        <span className="text-[10px]">Hide Details</span>
                       </button>
                     </div>
                   </div>
@@ -2625,12 +2466,12 @@ const ExporterDashboard = () => {
             Welcome back, {user?.name || 'John'}! 👋
           </h1>
           <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Here's your export shipment overview and container tracking status.
+            Here's your export order overview and shipment tracking status.
           </p>
         </div>
 
         {/* Stats Cards - Clickable */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4 mb-6">
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
@@ -2640,7 +2481,7 @@ const ExporterDashboard = () => {
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
-                <Anchor className="w-5 h-5" style={{ color: colors.primary }} />
+                <Package className="w-5 h-5" style={{ color: colors.primary }} />
               </div>
               <span className="text-xs font-medium text-green-500 flex items-center gap-1">
                 <ArrowUpRight className="w-3 h-3" />
@@ -2648,14 +2489,14 @@ const ExporterDashboard = () => {
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.total}
+              {orderStats.total}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Total Shipments
+              Total Orders
             </p>
             {containerFilter === 'all' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active Filter
+                ✓ Active
               </span>
             )}
           </div>
@@ -2663,9 +2504,9 @@ const ExporterDashboard = () => {
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerFilter === 'Ready' ? 'ring-1' : ''}`}
-            style={{ ringColor: containerFilter === 'Ready' ? colors.primary : 'transparent' }}
-            onClick={() => handleCardClick('Ready')}
+            } ${containerFilter === 'Ready for Shipping' ? 'ring-1' : ''}`}
+            style={{ ringColor: containerFilter === 'Ready for Shipping' ? colors.primary : 'transparent' }}
+            onClick={() => handleCardClick('Ready for Shipping')}
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
@@ -2673,18 +2514,18 @@ const ExporterDashboard = () => {
               </div>
               <span className="text-xs font-medium text-blue-500 flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                {containerStats.ready}
+                {orderStats.ready}
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.ready}
+              {orderStats.ready}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Ready for Export
+              Ready for Shipping
             </p>
-            {containerFilter === 'Ready' && (
+            {containerFilter === 'Ready for Shipping' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active Filter
+                ✓ Active
               </span>
             )}
           </div>
@@ -2692,28 +2533,57 @@ const ExporterDashboard = () => {
           <div 
             className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-            } ${containerFilter === 'At Port' ? 'ring-1' : ''}`}
-            style={{ ringColor: containerFilter === 'At Port' ? colors.primary : 'transparent' }}
-            onClick={() => handleCardClick('At Port')}
+            } ${containerFilter === 'Awaiting Confirmation' ? 'ring-1' : ''}`}
+            style={{ ringColor: containerFilter === 'Awaiting Confirmation' ? colors.primary : 'transparent' }}
+            onClick={() => handleCardClick('Awaiting Confirmation')}
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
-                <Anchor className="w-5 h-5" style={{ color: colors.warning }} />
+                <Clock className="w-5 h-5" style={{ color: colors.warning }} />
               </div>
               <span className="text-xs font-medium text-yellow-500 flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" />
-                {containerStats.atPort}
+                {orderStats.awaiting}
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.atPort}
+              {orderStats.awaiting}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              At Port
+              Awaiting Confirmation
             </p>
-            {containerFilter === 'At Port' && (
+            {containerFilter === 'Awaiting Confirmation' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active Filter
+                ✓ Active
+              </span>
+            )}
+          </div>
+
+          <div 
+            className={`p-4 rounded-lg transition-all duration-300 hover:shadow-xl cursor-pointer ${
+              isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
+            } ${containerFilter === 'Forwarded for Verification' ? 'ring-1' : ''}`}
+            style={{ ringColor: containerFilter === 'Forwarded for Verification' ? colors.primary : 'transparent' }}
+            onClick={() => handleCardClick('Forwarded for Verification')}
+          >
+            <div className="flex items-center justify-between">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
+                <FileCheck className="w-5 h-5" style={{ color: colors.primary }} />
+              </div>
+              <span className="text-xs font-medium text-purple-500 flex items-center gap-1">
+                <Flag className="w-3 h-3" />
+                {orderStats.forwarded}
+              </span>
+            </div>
+            <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {orderStats.forwarded}
+            </h3>
+            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Forwarded for Verification
+            </p>
+            {containerFilter === 'Forwarded for Verification' && (
+              <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
+                ✓ Active
               </span>
             )}
           </div>
@@ -2727,22 +2597,22 @@ const ExporterDashboard = () => {
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primaryBg }}>
-                <Ship className="w-5 h-5" style={{ color: colors.primary }} />
+                <Ship className="w-5 h-5" style={{ color: colors.success }} />
               </div>
               <span className="text-xs font-medium text-green-500 flex items-center gap-1">
                 <ArrowUpRight className="w-3 h-3" />
-                {containerStats.shipped}
+                {orderStats.shipped}
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {containerStats.shipped}
+              {orderStats.shipped}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
               Shipped
             </p>
             {containerFilter === 'Shipped' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active Filter
+                ✓ Active
               </span>
             )}
           </div>
@@ -2764,32 +2634,32 @@ const ExporterDashboard = () => {
               </span>
             </div>
             <h3 className={`text-xl font-bold mt-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ${(containerStats.totalValue / 1000).toFixed(1)}K
+              {formatUGX(orderStats.totalValue)}
             </h3>
             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Total Export Value
+              Total Order Value
             </p>
             {containerFilter === 'Delivered' && (
               <span className="text-[10px] mt-1 inline-block" style={{ color: colors.primary }}>
-                ✓ Active Filter
+                ✓ Active
               </span>
             )}
           </div>
         </div>
 
-        {/* Two Column Layout: Containers (Left) + Alerts (Right) */}
+        {/* Two Column Layout: Orders (Left) + Alerts (Right) */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* LEFT COLUMN - Containers Table */}
+          {/* LEFT COLUMN - Orders Table */}
           <div className="xl:col-span-3">
-            <div id="containers-section" className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${
+            <div id="orders-section" className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${
               isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
             }`}>
               <div className="flex flex-col gap-3 mb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Anchor className="w-5 h-5" style={{ color: colors.primary }} />
+                    <Package className="w-5 h-5" style={{ color: colors.primary }} />
                     <h2 className={`text-lg md:text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Export Shipments
+                      My Orders
                     </h2>
                     <span 
                       className="text-xs px-2 py-1 rounded-full"
@@ -2798,7 +2668,7 @@ const ExporterDashboard = () => {
                         color: colors.primary
                       }}
                     >
-                      {filteredContainers.length}
+                      {filteredOrders.length}
                     </span>
                     {containerFilter !== 'all' && (
                       <span 
@@ -2877,38 +2747,42 @@ const ExporterDashboard = () => {
                     style={{ focusRingColor: colors.primary }}
                   >
                     <option value="all">Status</option>
-                    <option value="Ready">Ready</option>
-                    <option value="At Port">At Port</option>
+                    <option value="Order Confirmed">Order Confirmed</option>
+                    <option value="Ready for Shipping">Ready for Shipping</option>
+                    <option value="Awaiting Confirmation">Awaiting Confirmation</option>
+                    <option value="Forwarded for Verification">Forwarded for Verification</option>
                     <option value="Shipped">Shipped</option>
                     <option value="Delivered">Delivered</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
 
                   <select
-                    value={containerBuyerFilter}
-                    onChange={(e) => setContainerBuyerFilter(e.target.value)}
+                    value={containerCustomerFilter}
+                    onChange={(e) => setContainerCustomerFilter(e.target.value)}
                     className={`px-2 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
                       isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                     }`}
                     style={{ focusRingColor: colors.primary }}
                   >
-                    {getUniqueBuyers().slice(0, 4).map(buyer => (
-                      <option key={buyer} value={buyer}>
-                        {buyer === 'all' ? 'Buyer' : buyer.substring(0, 12) + (buyer.length > 12 ? '...' : '')}
+                    {getUniqueCustomers().slice(0, 4).map(customer => (
+                      <option key={customer} value={customer}>
+                        {customer === 'all' ? 'Customer' : customer.substring(0, 15) + (customer.length > 15 ? '...' : '')}
                       </option>
                     ))}
                   </select>
 
                   <select
-                    value={containerAgentFilter}
-                    onChange={(e) => setContainerAgentFilter(e.target.value)}
+                    value={containerTransportFilter}
+                    onChange={(e) => setContainerTransportFilter(e.target.value)}
                     className={`px-2 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-2 transition-all duration-200 ${
                       isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                     }`}
                     style={{ focusRingColor: colors.primary }}
                   >
-                    {getUniqueAgents().map(agent => (
-                      <option key={agent} value={agent}>
-                        {agent === 'all' ? 'Agent' : agent}
+                    {getUniqueTransportModes().map(mode => (
+                      <option key={mode} value={mode}>
+                        {mode === 'all' ? 'Transport' : mode}
                       </option>
                     ))}
                   </select>
@@ -2923,25 +2797,25 @@ const ExporterDashboard = () => {
                   >
                     <option value="date-desc">Latest</option>
                     <option value="date-asc">Oldest</option>
-                    <option value="packages-desc">Most Pkg</option>
-                    <option value="value-desc">Highest Value</option>
+                    <option value="amount-desc">Highest Amount</option>
+                    <option value="amount-asc">Lowest Amount</option>
                     <option value="status">Status</option>
                   </select>
                 </div>
               </div>
 
-              {/* Container View */}
-              {filteredContainers.length > 0 ? (
+              {/* Order View */}
+              {filteredOrders.length > 0 ? (
                 containerViewMode === 'list' ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Container
+                            Order No
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Seal
+                            Customer
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Voyage
@@ -2950,10 +2824,7 @@ const ExporterDashboard = () => {
                             Status
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Buyer
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Value
+                            Amount (UGX)
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Payment
@@ -2964,60 +2835,62 @@ const ExporterDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {currentContainers.map((container) => (
-                          <React.Fragment key={container.id}>
+                        {currentOrders.map((order) => (
+                          <React.Fragment key={order.id}>
                             <tr 
                               className={`border-b cursor-pointer transition-colors ${
                                 isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'
-                              } ${expandedContainerId === container.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
-                              onClick={() => toggleContainerExpand(container.id)}
-                              data-container-id={container.id}
+                              } ${expandedOrderId === order.id ? (isDark ? 'bg-gray-700' : 'bg-gray-100') : ''}`}
+                              onClick={() => toggleOrderExpand(order.id)}
+                              data-order-id={order.id}
                             >
                               <td className="py-2 px-2">
                                 <div className="flex items-center gap-1">
-                                  <Anchor className="w-3 h-3" style={{ color: colors.primary }} />
                                   <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {container.id}
+                                    {order.orderNo}
                                   </span>
+                                  {order.exportType === 'Local' && (
+                                    <span className="text-[8px] px-1 py-0.5 rounded-full bg-green-500/20 text-green-500">
+                                      Local
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-2 px-2">
                                 <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                  {container.sealNo}
+                                  {order.customer.substring(0, 15)}{order.customer.length > 15 ? '...' : ''}
                                 </span>
                               </td>
                               <td className="py-2 px-2">
-                                <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                  {container.voyage}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  {getTransportModeIcon(order.transportMode)}
+                                  <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    {order.voyage}
+                                  </span>
+                                </div>
                               </td>
                               <td className="py-2 px-2">
                                 <span className={`text-xs px-1.5 py-0.5 rounded-full`}
                                   style={{
-                                    backgroundColor: getStatusColor(container.status) + '20',
-                                    color: getStatusColor(container.status)
+                                    backgroundColor: getStatusColor(order.status) + '20',
+                                    color: getStatusColor(order.status)
                                   }}>
-                                  {container.status}
-                                  {container.delayed && <AlertIcon className="w-2.5 h-2.5 ml-0.5 inline" />}
-                                </span>
-                              </td>
-                              <td className="py-2 px-2">
-                                <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                  {container.buyer.substring(0, 12)}{container.buyer.length > 12 ? '...' : ''}
+                                  {order.status}
+                                  {order.delayed && <AlertIcon className="w-2.5 h-2.5 ml-0.5 inline" />}
                                 </span>
                               </td>
                               <td className="py-2 px-2">
                                 <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                  {container.exportValue}
+                                  {formatUGX(order.orderAmount)}
                                 </span>
                               </td>
                               <td className="py-2 px-2">
                                 <span className={`text-xs px-1.5 py-0.5 rounded-full`}
                                   style={{
-                                    backgroundColor: getPaymentStatusColor(container.paymentStatus) + '20',
-                                    color: getPaymentStatusColor(container.paymentStatus)
+                                    backgroundColor: getPaymentStatusColor(order.paymentStatus) + '20',
+                                    color: getPaymentStatusColor(order.paymentStatus)
                                   }}>
-                                  {container.paymentStatus}
+                                  {order.paymentStatus}
                                 </span>
                               </td>
                               <td className="py-2 px-2">
@@ -3027,7 +2900,7 @@ const ExporterDashboard = () => {
                                     style={{ color: colors.primary }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      toggleContainerExpand(container.id);
+                                      toggleOrderExpand(order.id);
                                     }}
                                     title="View"
                                   >
@@ -3035,45 +2908,21 @@ const ExporterDashboard = () => {
                                   </button>
                                   <button
                                     className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                    style={{ color: colors.primary }}
+                                    style={{ color: colors.warning }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleQuickAssignAgent(container);
+                                      openStatusModal(order);
                                     }}
-                                    title="Assign Agent"
+                                    title="Update Status"
                                   >
-                                    <UserPlus className="w-3.5 h-3.5" />
+                                    <Edit className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
                                     style={{ color: colors.primary }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleQuickAssignTransporter(container);
-                                    }}
-                                    title="Assign Transporter"
-                                  >
-                                    <Truck className="w-3.5 h-3.5" />
-                                  </button>
-                                  {container.assignedTransporter && (
-                                    <button
-                                      className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                      style={{ color: colors.info }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleTrackTransporter(container);
-                                      }}
-                                      title="Track Transporter"
-                                    >
-                                      <Map className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  <button
-                                    className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
-                                    style={{ color: colors.primary }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePrint(container);
+                                      handlePrint(order);
                                     }}
                                     title="Print"
                                   >
@@ -3082,7 +2931,7 @@ const ExporterDashboard = () => {
                                 </div>
                               </td>
                             </tr>
-                            {renderExpandedContainer(container)}
+                            {renderExpandedOrder(order)}
                           </React.Fragment>
                         ))}
                       </tbody>
@@ -3115,8 +2964,8 @@ const ExporterDashboard = () => {
                 )
               ) : (
                 <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <Anchor className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium">No shipments found</p>
+                  <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm font-medium">No orders found</p>
                   <p className="text-xs">Try adjusting your filters</p>
                   <button
                     onClick={resetContainerFilters}
@@ -3270,19 +3119,19 @@ const ExporterDashboard = () => {
                             </p>
                             <div className="flex items-center justify-between mt-1">
                               <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-400'}`}>
-                                {alert.containerId}
+                                {alert.orderId}
                               </span>
                               <button
                                 className="p-0.5 rounded transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
                                 style={{ color: colors.primary }}
                                 onClick={() => {
-                                  const container = containersData.find(c => c.id === alert.containerId);
-                                  if (container) {
-                                    setExpandedContainerId(container.id);
+                                  const order = ordersData.find(c => c.id === alert.orderId);
+                                  if (order) {
+                                    setExpandedOrderId(order.id);
                                     setExpandedContainerTab('info');
                                   }
                                 }}
-                                title="View Container"
+                                title="View Order"
                               >
                                 <Eye className="w-3 h-3" />
                               </button>
@@ -3337,9 +3186,8 @@ const ExporterDashboard = () => {
       </div>
 
       {/* Modals */}
-      {showAssignAgentModal && <AssignAgentModal />}
+      {showStatusModal && <StatusUpdateModal />}
       {showPrintModal && <PrintModal />}
-      {showTransporterTracking && <TransporterTrackingModal />}
     </div>
   );
 };

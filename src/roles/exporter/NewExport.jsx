@@ -1,10 +1,25 @@
-// NewExport.jsx - Complete exporter workflow with freight forwarding
-import React, { useState, useContext, useEffect, useRef } from 'react';
+// NewExport.jsx - Complete exporter workflow with two modes (Self-Service / Importer Order)
+// Both modes support Local and International export types.
+//
+// FIXES IN THIS VERSION
+// 1. Step index <-> rendered content are now in sync for BOTH modes.
+//    Previously self-service injected "mode selection" as case 0, which shifted every
+//    step by one (title "Bill of Lading" rendered the Packing List, "Book Local Transport"
+//    rendered Finalise Preparation, and the final step was unreachable).
+// 2. Self-service step 0 ("Prepare Goods") now shows a compact mode/export-type switcher
+//    together with the item preparation table, so step counts stay 7 (intl) / 6 (local).
+// 3. "Proceed" buttons use currentStep + 1 instead of hard-coded indexes.
+// 4. Nested cell edits (packingList.*, billOfLading.*, customFields.*) actually persist.
+// 5. Table / toast / viewer sub-components hoisted out of the component so inputs no
+//    longer lose focus on every keystroke.
+// 6. Total value auto-calculates from quantity x unit price.
+// 7. Document completeness check no longer treats "undefined" as uploaded.
+
+import React, { useState, useContext, useEffect } from 'react';
 import {
   Package,
   ClipboardList,
   Send,
-  FileCheck,
   FileSignature,
   ChevronRight,
   ChevronLeft,
@@ -25,55 +40,36 @@ import {
   FileSpreadsheet,
   FileArchive,
   Info,
-  Mail,
   Edit2,
-  MoreVertical,
   Search,
-  Filter,
-  DownloadCloud,
   UploadCloud,
-  AlertTriangle,
   PackageCheck,
-  Shield,
   ChevronDown,
   ChevronUp,
-  Copy,
-  Printer,
-  ExternalLink,
-  Users,
-  UserCheck,
-  UserX,
-  Calendar,
-  DollarSign,
   Truck,
   Check,
-  Minus,
   Copy as CopyIcon,
   FileText,
   ShoppingBag,
-  UserPlus,
-  UserMinus,
-  ThumbsUp,
-  ThumbsDown,
-  FileQuestion,
-  ListChecks,
-  ClipboardCheck,
   Ship,
-  Anchor,
   Boxes,
-  FileSpreadsheet as FileSpreadsheetIcon,
-  FileBarChart,
-  Building2,
-  MapPin,
-  Phone,
-  Globe,
-  Layers
+  Layers,
+  Briefcase,
+  Bus
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import ProgressBar from '../../components/ProgressBar';
 
-// Mock user profile data for exporter
+// ============================================================================
+// THEME - Now built from context, not hardcoded
+// ============================================================================
+// REMOVED: const COLORS = { ... } - Now built inside the component
+
+// ============================================================================
+// MOCK DATA
+// ============================================================================
 const EXPORTER_PROFILE = {
   id: 'EXP-001',
   companyName: 'Uganda Exporters Ltd',
@@ -82,24 +78,21 @@ const EXPORTER_PROFILE = {
   contactEmail: 'john@ugandaexporters.com',
   contactPhone: '+256 700 123 456',
   registrationNumber: 'REG-2024-001',
-  tinNumber: 'TIN-123456789',
+  tinNumber: 'TIN-123456789'
 };
 
-// Mock importers data
-const SYSTEM_IMPORTERS = [
-  { id: 'IMP-001', name: 'TechGlobal Imports Ltd', email: 'info@techglobalimports.com', phone: '+256 701 234 567' },
-  { id: 'IMP-002', name: 'East African Importers', email: 'sales@eaimporters.com', phone: '+256 702 345 678' },
-  { id: 'IMP-003', name: 'Kampala Import Distributors', email: 'info@kampalaimports.com', phone: '+256 703 456 789' },
-];
-
-// Mock freight forwarders
 const FREIGHT_FORWARDERS = [
   { id: 'FF-001', name: 'Global Freight Logistics', email: 'info@globalfreight.com', phone: '+256 701 234 567' },
   { id: 'FF-002', name: 'East Africa Shipping Co', email: 'info@eastafricashipping.com', phone: '+256 702 345 678' },
-  { id: 'FF-003', name: 'Kampala Cargo Services', email: 'info@kampalacargo.com', phone: '+256 703 456 789' },
+  { id: 'FF-003', name: 'Kampala Cargo Services', email: 'info@kampalacargo.com', phone: '+256 703 456 789' }
 ];
 
-// Mock order requests from importers
+const LOCAL_TRANSPORT_COMPANIES = [
+  { id: 'TRP-001', name: 'Kampala Haulage Ltd', email: 'info@kampalahaulage.com', phone: '+256 701 234 567' },
+  { id: 'TRP-002', name: 'Uganda Logistics Services', email: 'info@ugandalogistics.com', phone: '+256 702 345 678' },
+  { id: 'TRP-003', name: 'East African Transporters', email: 'info@eastafricantransport.com', phone: '+256 703 456 789' }
+];
+
 const MOCK_ORDER_REQUESTS = [
   {
     id: 'REQ-001',
@@ -130,126 +123,659 @@ const MOCK_ORDER_REQUESTS = [
     notes: 'Need these for new office setup',
     responseDate: null,
     responseNotes: ''
-  },
-  {
-    id: 'REQ-003',
-    importerName: 'Kampala Import Distributors',
-    importerEmail: 'info@kampalaimports.com',
-    importerPhone: '+256 703 456 789',
-    requestDate: '2024-01-20T09:15:00.000Z',
-    items: [
-      { id: 5, itemName: 'Samsung Phones', quantity: 500, unitPrice: '500000', totalValue: '250000000' },
-      { id: 6, itemName: 'Phone Accessories', quantity: 1000, unitPrice: '50000', totalValue: '50000000' }
-    ],
-    status: 'pending',
-    notes: 'Monthly shipment',
-    responseDate: null,
-    responseNotes: ''
   }
 ];
 
-// Helper function to ensure item has all required properties
-const ensureItemStructure = (item) => {
-  return {
-    ...item,
-    pvoc: {
-      certificateNumber: '',
-      issueDate: '',
-      expiryDate: '',
-      status: 'pending',
-      uploadedDocuments: [],
-      ...item.pvoc,
-      uploadedDocuments: item.pvoc?.uploadedDocuments || []
-    },
-    coc: {
-      certificateNumber: '',
-      issueDate: '',
-      expiryDate: '',
-      status: 'pending',
-      uploadedDocuments: [],
-      ...item.coc,
-      uploadedDocuments: item.coc?.uploadedDocuments || []
-    },
-    packingList: {
-      packageType: '',
-      numberOfPackages: '',
-      weight: '',
-      dimensions: '',
-      handlingInstructions: '',
-      uploadedDocuments: [],
-      ...item.packingList,
-      uploadedDocuments: item.packingList?.uploadedDocuments || []
-    },
-    billOfLading: {
-      billNumber: '',
-      portOfLoading: '',
-      portOfDischarge: '',
-      vesselName: '',
-      voyageNumber: '',
-      containerNumber: '',
-      sealNumber: '',
-      uploadedDocuments: [],
-      ...item.billOfLading,
-      uploadedDocuments: item.billOfLading?.uploadedDocuments || []
-    }
-  };
+// ============================================================================
+// HELPERS
+// ============================================================================
+const ensureItemStructure = (item, mode = 'self') => ({
+  ...item,
+  status: item.status || 'pending',
+  exporterStatus: item.exporterStatus || 'pending',
+  exporterNotes: item.exporterNotes || '',
+  importerId: item.importerId || '',
+  importerName: item.importerName || '',
+  importerEmail: item.importerEmail || '',
+  importerStatus: item.importerStatus || 'pending',
+  importerNotes: item.importerNotes || '',
+  importerQuantity: item.importerQuantity || '',
+  isImporterOrder: item.isImporterOrder ?? mode === 'importer',
+  customFields: item.customFields || {},
+  pvoc: {
+    certificateNumber: '',
+    issueDate: '',
+    expiryDate: '',
+    status: 'pending',
+    ...item.pvoc,
+    uploadedDocuments: item.pvoc?.uploadedDocuments || []
+  },
+  coc: {
+    certificateNumber: '',
+    issueDate: '',
+    expiryDate: '',
+    status: 'pending',
+    ...item.coc,
+    uploadedDocuments: item.coc?.uploadedDocuments || []
+  },
+  packingList: {
+    packageType: '',
+    numberOfPackages: '',
+    weight: '',
+    dimensions: '',
+    handlingInstructions: '',
+    ...item.packingList,
+    uploadedDocuments: item.packingList?.uploadedDocuments || []
+  },
+  billOfLading: {
+    billNumber: '',
+    portOfLoading: '',
+    portOfDischarge: '',
+    vesselName: '',
+    voyageNumber: '',
+    containerNumber: '',
+    sealNumber: '',
+    ...item.billOfLading,
+    uploadedDocuments: item.billOfLading?.uploadedDocuments || []
+  },
+  commercialInvoice: {
+    document: null,
+    uploadedAt: null,
+    status: 'pending',
+    ...item.commercialInvoice
+  },
+  freightInvoice: {
+    invoiceNumber: '',
+    amount: '',
+    date: '',
+    status: 'pending',
+    ...item.freightInvoice,
+    uploadedDocuments: item.freightInvoice?.uploadedDocuments || []
+  },
+  travelDocuments: {
+    ...item.travelDocuments,
+    uploadedDocuments: item.travelDocuments?.uploadedDocuments || []
+  }
+});
+
+// Read a possibly nested value: getNested(item, 'packingList.weight')
+const getNested = (obj, path) => {
+  if (!path) return '';
+  const parts = String(path).split('.');
+  let current = obj;
+  for (const part of parts) {
+    if (current === undefined || current === null) return '';
+    current = current[part];
+  }
+  return current ?? '';
 };
 
+// Immutably write a possibly nested value: setNested(item, 'packingList.weight', 5)
+const setNested = (obj, path, value) => {
+  const parts = String(path).split('.');
+  if (parts.length === 1) return { ...obj, [parts[0]]: value };
+  const [head, ...rest] = parts;
+  return { ...obj, [head]: setNested(obj?.[head] || {}, rest.join('.'), value) };
+};
+
+const formatCurrency = (amount) => {
+  if (!amount) return 'UGX 0';
+  return `UGX ${Number(amount).toLocaleString()}`;
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getFileIcon = (fileType) => {
+  if (fileType === 'application/pdf') return <FileText className="w-4 h-4 text-red-500" />;
+  if (fileType?.includes('image')) return <Image className="w-4 h-4 text-blue-500" />;
+  if (fileType?.includes('spreadsheet') || fileType?.includes('excel')) return <FileSpreadsheet className="w-4 h-4 text-green-500" />;
+  if (fileType?.includes('zip') || fileType?.includes('rar')) return <FileArchive className="w-4 h-4 text-orange-500" />;
+  return <File className="w-4 h-4 text-gray-500" />;
+};
+
+const getStatusColor = (status) => {
+  const map = {
+    pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    available: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    unavailable: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    partial: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    accepted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    referred: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    uploaded: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    approved: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    sent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    invoice_received: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+  };
+  return map[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+};
+
+const getOrderStatusDisplay = (status) => {
+  const map = {
+    draft: 'Draft',
+    sent: 'Sent',
+    review: 'Under Review',
+    confirmed: 'Confirmed',
+    finalized: 'Finalized'
+  };
+  return map[status] || 'Unknown';
+};
+
+// Opens a file picker without needing a hidden <input> in the tree
+const pickFile = (onPicked, { multiple = false, accept = '.pdf,.doc,.docx,.png,.jpg,.jpeg' } = {}) => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = accept;
+  input.multiple = multiple;
+  input.onchange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    onPicked(multiple ? files : files[0]);
+  };
+  input.click();
+};
+
+const readFileAsDocument = (file, index = 0) =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () =>
+      resolve({
+        id: Date.now() + index,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadDate: new Date().toISOString(),
+        data: reader.result
+      });
+    reader.readAsDataURL(file);
+  });
+
+// ============================================================================
+// HOISTED SUB-COMPONENTS
+// (kept outside NewExport so React does not remount them on every keystroke)
+// ============================================================================
+const Toast = ({ message, type, onClose, themeColors }) => {
+  if (!message) return null;
+  
+  const toastColors = {
+    success: { bg: themeColors?.success || '#10b981', icon: <CheckCircle className="w-5 h-5" /> },
+    error: { bg: themeColors?.danger || '#ef4444', icon: <AlertCircle className="w-5 h-5" /> },
+    info: { bg: themeColors?.info || '#3b82f6', icon: <Info className="w-5 h-5" /> }
+  };
+  
+  const style = toastColors[type] || toastColors.success;
+
+  return (
+    <div className={`fixed top-24 right-4 z-[110] flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl text-white`}
+         style={{ backgroundColor: style.bg }}>
+      {style.icon}
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="ml-2 hover:opacity-80">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
+const BulkActionBar = ({ isDark, selectedCount, onDelete, onDuplicate, onExport, onClear, themeColors }) => {
+  if (!selectedCount) return null;
+  
+  const colors = themeColors || {
+    primary: '#714b67',
+    primaryBg: '#f5f0f4',
+    primaryBgDark: '#2d1f29',
+    danger: '#ef4444'
+  };
+  
+  return (
+    <div className={`flex flex-wrap items-center gap-3 p-3 rounded-lg border-2 mb-4 ${isDark ? 'border-blue-700 bg-blue-900/20' : 'border-blue-300 bg-blue-50'}`}>
+      <div className="flex items-center gap-2">
+        <Check className="w-4 h-4 text-blue-500" />
+        <span className={`text-sm font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+          {selectedCount} item(s) selected
+        </span>
+      </div>
+      <div className="flex-1" />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onDuplicate}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+          style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
+        >
+          <CopyIcon className="w-3 h-3" />
+          Duplicate
+        </button>
+        <button
+          onClick={onExport}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+          style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
+        >
+          <Download className="w-3 h-3" />
+          Export
+        </button>
+        <button
+          onClick={onDelete}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
+          style={{ backgroundColor: colors.danger }}
+        >
+          <Trash2 className="w-3 h-3" />
+          Delete
+        </button>
+        <button
+          onClick={onClear}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <X className="w-3 h-3" />
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// OdooTable component - receives themeColors as prop
+const OdooTable = ({
+  isDark,
+  items = [],
+  columns = [],
+  onCellEdit,
+  onRowDelete,
+  onRowAdd,
+  onAddColumn,
+  onRemoveColumn,
+  showCheckboxes = true,
+  actions = [],
+  footer = null,
+  showAddRow = true,
+  selectedRows = new Set(),
+  onRowSelect = null,
+  onSelectAll = null,
+  emptyMessage = 'No items added yet',
+  themeColors
+}) => {
+  const [sortField, setSortField] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
+  
+  const colors = themeColors || {
+    primary: '#714b67',
+    primaryBg: '#f5f0f4',
+    primaryBgDark: '#2d1f29',
+    danger: '#ef4444'
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedItems = [...items];
+  if (sortField) {
+    sortedItems.sort((a, b) => {
+      const aVal = getNested(a, sortField);
+      const bVal = getNested(b, sortField);
+      if (sortDirection === 'asc') return aVal > bVal ? 1 : -1;
+      return aVal < bVal ? 1 : -1;
+    });
+  }
+
+  const isAllSelected = items.length > 0 && items.every((item) => selectedRows.has(item.id));
+
+  const renderCellContent = (item, col) => {
+    if (col.render) return col.render(item);
+
+    const value = getNested(item, col.key);
+
+    if (col.editable === false) {
+      return <span className={isDark ? 'text-white' : 'text-gray-900'}>{value === '' ? '-' : value}</span>;
+    }
+
+    return (
+      <input
+        type={col.type || 'text'}
+        value={value}
+        onChange={(e) => onCellEdit && onCellEdit(item.id, col.key, e.target.value)}
+        className={`w-full min-w-[110px] px-2 py-1 rounded border bg-transparent focus:outline-none focus:ring-1 ${
+          isDark ? 'border-gray-600 text-white placeholder-gray-500' : 'border-gray-200 text-gray-900 placeholder-gray-400'
+        }`}
+        placeholder={col.placeholder || ''}
+      />
+    );
+  };
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-2 p-3 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{items.length} items</span>
+          {selectedRows.size > 0 && (
+            <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>• {selectedRows.size} selected</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {onAddColumn && (
+            <button
+              onClick={onAddColumn}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
+              style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
+            >
+              <Plus className="w-3 h-3" />
+              Add Column
+            </button>
+          )}
+          {showAddRow && onRowAdd && (
+            <button
+              onClick={onRowAdd}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Plus className="w-3 h-3" />
+              Add Item
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+            <tr>
+              {showCheckboxes && (
+                <th className="px-3 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={() => onSelectAll && onSelectAll()}
+                    className="rounded border-gray-300"
+                  />
+                </th>
+              )}
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className={`px-3 py-2 text-left text-xs font-medium whitespace-nowrap cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                    isDark ? 'text-gray-300' : 'text-gray-600'
+                  }`}
+                  onClick={() => handleSort(col.key)}
+                >
+                  <div className="flex items-center gap-1">
+                    {col.label}
+                    {sortField === col.key && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    {col.removable && onRemoveColumn && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveColumn(col.removeKey || col.key);
+                        }}
+                        className="ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/20"
+                      >
+                        <X className="w-3 h-3 text-red-500" />
+                      </button>
+                    )}
+                  </div>
+                </th>
+              ))}
+              {(actions.length > 0 || onRowDelete) && (
+                <th className={`px-3 py-2 text-center text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Actions
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+            {sortedItems.map((item, index) => (
+              <tr
+                key={item.id}
+                className={`${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors ${
+                  index % 2 === 0 ? (isDark ? 'bg-gray-800/50' : 'bg-white') : isDark ? 'bg-gray-700/30' : 'bg-gray-50/50'
+                }`}
+              >
+                {showCheckboxes && (
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.has(item.id)}
+                      onChange={() => onRowSelect && onRowSelect(item.id)}
+                      className="rounded border-gray-300"
+                    />
+                  </td>
+                )}
+                {columns.map((col) => (
+                  <td key={`${item.id}-${col.key}`} className="px-3 py-2 align-middle">
+                    {renderCellContent(item, col)}
+                  </td>
+                ))}
+                {(actions.length > 0 || onRowDelete) && (
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {actions.map((action, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => action.onClick(item)}
+                          className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors ${action.className || ''}`}
+                          title={action.label}
+                        >
+                          {action.icon}
+                        </button>
+                      ))}
+                      {onRowDelete && (
+                        <button
+                          onClick={() => onRowDelete(item.id)}
+                          className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td
+                  colSpan={columns.length + (showCheckboxes ? 1 : 0) + (actions.length > 0 || onRowDelete ? 1 : 0)}
+                  className={`px-4 py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                >
+                  <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>{emptyMessage}</p>
+                  {showAddRow && onRowAdd && <p className="text-xs mt-1">Click &quot;Add Item&quot; to get started</p>}
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {footer && <tfoot className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>{footer}</tfoot>}
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const DocumentViewerPage = ({ isDark, doc, onClose, themeColors }) => {
+  if (!doc) return null;
+  
+  const colors = themeColors || { primary: '#714b67' };
+
+  const download = () => {
+    const link = document.createElement('a');
+    link.href = doc.data;
+    link.download = doc.name;
+    link.click();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-gray-900">
+      <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          {getFileIcon(doc.type)}
+          <div className="min-w-0">
+            <h3 className={`text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.name}</h3>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {formatFileSize(doc.size)} • Uploaded {doc.uploadDate ? new Date(doc.uploadDate).toLocaleString() : '-'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={download}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <Download className="w-4 h-4" />
+            Download
+          </button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 p-6 overflow-auto">
+        {doc.type?.startsWith('image/') ? (
+          <img src={doc.data} alt={doc.name} className="max-w-full max-h-full object-contain mx-auto" />
+        ) : doc.type === 'application/pdf' ? (
+          <iframe src={doc.data} className="w-full h-full min-h-[600px] rounded-lg border" title={doc.name} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full py-12">
+            <File className="w-24 h-24 mx-auto mb-4 text-gray-400" />
+            <p className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Preview not available for this file type</p>
+            <button
+              onClick={download}
+              className="mt-4 px-6 py-3 rounded-lg text-white text-sm font-medium transition-all duration-200 hover:shadow-lg"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Download className="w-4 h-4 inline mr-2" />
+              Download File
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// STEP DEFINITIONS
+// Step index === rendered content index. No hidden/injected steps.
+// ============================================================================
+const getSteps = (exportMode, isInternational) => {
+  if (exportMode === 'importer') {
+    if (isInternational) {
+      return [
+        { id: 0, key: 'loadOrder', title: 'Load Order', icon: ShoppingBag, description: 'Load order from importer request', required: true },
+        { id: 1, key: 'importerReview', title: 'Items Review & Confirm', icon: ClipboardList, description: 'Review items and confirm availability', required: true },
+        { id: 2, key: 'salesContract', title: 'Sales Contract & Invoice', icon: FileSignature, description: 'Create sales contract and invoice', required: true },
+        { id: 3, key: 'packingList', title: 'Packing List', icon: Boxes, description: 'Create packing list', required: true },
+        { id: 4, key: 'billOfLading', title: 'Bill of Lading', icon: Ship, description: 'Create bill of lading', required: true },
+        { id: 5, key: 'finalisePreparation', title: 'Finalise Preparation', icon: PackageCheck, description: 'Upload Commercial Invoice and Freight Invoice', required: true },
+        { id: 6, key: 'transport', title: 'Send to Freight Forwarder', icon: Truck, description: 'Select freight forwarder and send goods', required: true },
+        { id: 7, key: 'orderFinalisation', title: 'Order Finalisation', icon: CheckCircle, description: 'Finalize the export order', required: true }
+      ];
+    }
+    return [
+      { id: 0, key: 'loadOrder', title: 'Load Order', icon: ShoppingBag, description: 'Load order from importer request', required: true },
+      { id: 1, key: 'importerReview', title: 'Items Review & Confirm', icon: ClipboardList, description: 'Review items and confirm availability', required: true },
+      { id: 2, key: 'salesContract', title: 'Sales Contract & Invoice', icon: FileSignature, description: 'Create sales contract and invoice', required: true },
+      { id: 3, key: 'packingList', title: 'Packing List', icon: Boxes, description: 'Create packing list', required: true },
+      { id: 4, key: 'finalisePreparation', title: 'Finalise Preparation', icon: PackageCheck, description: 'Upload Commercial Invoice and Travel Documents', required: true },
+      { id: 5, key: 'transport', title: 'Book Local Transport', icon: Bus, description: 'Select local transport company to send goods', required: true },
+      { id: 6, key: 'orderFinalisation', title: 'Order Finalisation', icon: CheckCircle, description: 'Finalize the export order', required: true }
+    ];
+  }
+
+  // Self-service
+  if (isInternational) {
+    return [
+      { id: 0, key: 'prepareGoods', title: 'Prepare Goods', icon: Package, description: 'Choose export type and add your items', required: true },
+      { id: 1, key: 'itemsReview', title: 'Items Review', icon: ClipboardList, description: 'Review and manage your items', required: true },
+      { id: 2, key: 'packingList', title: 'Packing List', icon: Boxes, description: 'Create packing list', required: true },
+      { id: 3, key: 'billOfLading', title: 'Bill of Lading', icon: Ship, description: 'Create bill of lading', required: true },
+      { id: 4, key: 'finalisePreparation', title: 'Finalise Preparation', icon: PackageCheck, description: 'Upload Commercial Invoice and Freight Invoice', required: true },
+      { id: 5, key: 'transport', title: 'Send to Freight Forwarder', icon: Truck, description: 'Select freight forwarder and send goods', required: true },
+      { id: 6, key: 'orderFinalisation', title: 'Order Finalisation', icon: CheckCircle, description: 'Finalize the export order', required: true }
+    ];
+  }
+  return [
+    { id: 0, key: 'prepareGoods', title: 'Prepare Goods', icon: Package, description: 'Choose export type and add your items', required: true },
+    { id: 1, key: 'itemsReview', title: 'Items Review', icon: ClipboardList, description: 'Review and manage your items', required: true },
+    { id: 2, key: 'packingList', title: 'Packing List', icon: Boxes, description: 'Create packing list', required: true },
+    { id: 3, key: 'finalisePreparation', title: 'Finalise Preparation', icon: PackageCheck, description: 'Upload Commercial Invoice and Travel Documents', required: true },
+    { id: 4, key: 'transport', title: 'Book Local Transport', icon: Bus, description: 'Select local transport company to send goods', required: true },
+    { id: 5, key: 'orderFinalisation', title: 'Order Finalisation', icon: CheckCircle, description: 'Finalize the export order', required: true }
+  ];
+};
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 const NewExport = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { darkMode } = useContext(ThemeContext);
+  // ===== KEY CHANGE: Get theme from context =====
+  const { darkMode, theme } = useContext(ThemeContext);
+  const isDark = darkMode;
+
+  // ===== KEY CHANGE: Build colors from theme =====
+  const colors = {
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
+    border: theme.border || '#e2e8f0',
+    hover: theme.surfaceHover || '#f7fafc'
+  };
+
   const [currentStep, setCurrentStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [uploadingFile, setUploadingFile] = useState(false);
   const [toast, setToast] = useState(null);
+
   const [viewingDocument, setViewingDocument] = useState(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
+  const [showBatchLoadModal, setShowBatchLoadModal] = useState(false);
+
   const [selectedImporter, setSelectedImporter] = useState('');
   const [importerEmail, setImporterEmail] = useState('');
   const [importerName, setImporterName] = useState('');
+
   const [selectedFreightForwarder, setSelectedFreightForwarder] = useState('');
   const [freightForwarderName, setFreightForwarderName] = useState('');
   const [freightForwarderEmail, setFreightForwarderEmail] = useState('');
+
   const [orderStatus, setOrderStatus] = useState('draft');
   const [reviewItems, setReviewItems] = useState({});
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showPVoCModal, setShowPVoCModal] = useState(false);
-  const [showCoCModal, setShowCoCModal] = useState(false);
-  const [showPackingListModal, setShowPackingListModal] = useState(false);
-  const [showBillOfLadingModal, setShowBillOfLadingModal] = useState(false);
-  const [activePVoCItem, setActivePVoCItem] = useState(null);
-  const [activeCoCItem, setActiveCoCItem] = useState(null);
-  const [activePackingListItem, setActivePackingListItem] = useState(null);
-  const [activeBillOfLadingItem, setActiveBillOfLadingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [editingCell, setEditingCell] = useState(null);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
   const [customColumns, setCustomColumns] = useState([]);
-  const [expandedItems, setExpandedItems] = useState(new Set());
-  const [addingRow, setAddingRow] = useState(false);
   const [selectedRows, setSelectedRows] = useState(new Set());
-  const [showBulkActions, setShowBulkActions] = useState(false);
-  const [orderRequests, setOrderRequests] = useState(MOCK_ORDER_REQUESTS);
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState(null);
-  const [requestAction, setRequestAction] = useState('');
-  const [requestNotes, setRequestNotes] = useState('');
+  const [orderRequests] = useState(MOCK_ORDER_REQUESTS);
   const [loadOrderMode, setLoadOrderMode] = useState(false);
   const [isOrderConfirmed, setIsOrderConfirmed] = useState(false);
-  const [showFreightModal, setShowFreightModal] = useState(false);
-  const [freightAction, setFreightAction] = useState('');
-  const [freightNotes, setFreightNotes] = useState('');
   const [freightResponse, setFreightResponse] = useState(null);
-  const [selectedMultipleOrders, setSelectedMultipleOrders] = useState(new Set());
-  const [showBatchLoadModal, setShowBatchLoadModal] = useState(false);
-  const [batchOrders, setBatchOrders] = useState([]);
 
-  // Sales Contract Data
+  // Mode + export type
+  const [exportMode, setExportMode] = useState('self'); // 'self' | 'importer'
+  const [isInternational, setIsInternational] = useState(true);
+
   const [salesContract, setSalesContract] = useState({
     contractNumber: '',
     contractDate: new Date().toISOString().split('T')[0],
@@ -260,10 +786,9 @@ const NewExport = () => {
     deliveryDate: '',
     totalValue: '',
     uploadedDocuments: [],
-    invoiceDocument: null // Added for invoice document upload
+    invoiceDocument: null
   });
 
-  // Freight Data
   const [freightData, setFreightData] = useState({
     freightForwarder: '',
     freightForwarderEmail: '',
@@ -278,22 +803,13 @@ const NewExport = () => {
     billOfLadingNumber: '',
     status: 'pending',
     uploadedDocuments: [],
-    freightInvoice: {
-      invoiceNumber: '',
-      invoiceDate: '',
-      amount: '',
-      uploadedDocuments: []
-    },
-    billOfLading: {
-      number: '',
-      date: '',
-      portOfLoading: '',
-      portOfDischarge: '',
-      vessel: '',
-      container: '',
-      uploadedDocuments: []
-    },
-    response: null
+    freightInvoice: { invoiceNumber: '', invoiceDate: '', amount: '', uploadedDocuments: [] },
+    billOfLading: { number: '', date: '', portOfLoading: '', portOfDischarge: '', vessel: '', container: '', uploadedDocuments: [] },
+    response: null,
+    paymentConfirmed: false,
+    paymentConfirmedAt: null,
+    goodsSent: false,
+    goodsSentAt: null
   });
 
   const [invoiceData, setInvoiceData] = useState({
@@ -313,23 +829,21 @@ const NewExport = () => {
   const [importData, setImportData] = useState({
     exporterDetails: { ...EXPORTER_PROFILE },
     items: [
-      ensureItemStructure({
-        id: Date.now(),
-        itemCode: 'ITEM-001',
-        itemName: 'Export Product 1',
-        itemGroup: 'Electronics',
-        stockUOM: 'Pieces',
-        barcode: '1234567890',
-        standardSellingRate: '1200000',
-        quantity: 10,
-        unitPrice: '1200000',
-        totalValue: '12000000',
-        status: 'pending',
-        importerStatus: 'pending',
-        importerNotes: '',
-        importerQuantity: '',
-        customFields: {}
-      })
+      ensureItemStructure(
+        {
+          id: Date.now(),
+          itemCode: 'ITEM-001',
+          itemName: 'Export Product 1',
+          itemGroup: 'Electronics',
+          stockUOM: 'Pieces',
+          barcode: '1234567890',
+          standardSellingRate: '1200000',
+          quantity: 10,
+          unitPrice: '1200000',
+          totalValue: '12000000'
+        },
+        'self'
+      )
     ],
     exportNumber: '',
     createdAt: new Date().toISOString(),
@@ -340,245 +854,163 @@ const NewExport = () => {
     originalRequestId: null,
     isOrderConfirmed: false,
     freightForwarder: '',
-    freightStatus: 'pending'
+    freightStatus: 'pending',
+    exportType: 'international',
+    mode: 'self'
   });
 
-  const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
-    border: '#e2e8f0',
-    hover: '#f7fafc',
-  };
+  const steps = getSteps(exportMode, isInternational);
+  const safeStepIndex = Math.min(currentStep, steps.length - 1);
+  const activeStep = steps[safeStepIndex];
 
-  const isDark = darkMode;
-
-  // Define steps for exporter - Updated workflow (Order Finalisation moved after Sales Contact & Invoice)
-  const steps = [
-    {
-      id: 0,
-      title: 'Load Order / Prepare Goods',
-      icon: ShoppingBag,
-      description: 'Load one or multiple order requests or prepare goods for export',
-      required: true,
-    },
-    {
-      id: 1,
-      title: 'Items Review',
-      icon: ClipboardList,
-      description: 'Review and manage your items list',
-      required: true,
-    },
-    {
-      id: 2,
-      title: 'Send to Importer',
-      icon: Send,
-      description: 'Send item list to importer for confirmation',
-      required: true,
-    },
-    {
-      id: 3,
-      title: 'Importer Confirmation',
-      icon: FileCheck,
-      description: 'Review importer confirmation and availability',
-      required: true,
-    },
-    {
-      id: 4,
-      title: 'Sales Contract & Invoice',
-      icon: FileSignature,
-      description: 'Create sales contract, add invoice document, and create invoice',
-      required: true,
-    },
-    {
-      id: 5,
-      title: 'Packing & Bill of Lading',
-      icon: Boxes,
-      description: 'Create packing list and bill of lading',
-      required: true,
-    },
-    {
-      id: 6,
-      title: 'Send to Freight Forwarder',
-      icon: Ship,
-      description: 'Send documents to freight forwarder',
-      required: true,
-    },
-    {
-      id: 7,
-      title: 'Order Finalisation',
-      icon: CheckCircle,
-      description: 'Finalize the export order',
-      required: true,
-    }
-  ];
-
-  // Load order request if coming from request
-  useEffect(() => {
-    const stateData = location.state;
-    if (stateData && stateData.requestData) {
-      const request = stateData.requestData;
-      loadOrderFromRequest(request);
-      setLoadOrderMode(true);
-      setCurrentStep(1);
-    }
-  }, [location]);
-
-  // Load saved data
-  useEffect(() => {
-    const savedData = localStorage.getItem('exportDraft');
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        const fixedItems = (parsed.items || []).map(item => ensureItemStructure(item));
-        setImportData({
-          ...parsed,
-          items: fixedItems
-        });
-        if (parsed.orderStatus) setOrderStatus(parsed.orderStatus);
-        if (parsed.reviewItems) setReviewItems(parsed.reviewItems);
-        if (parsed.selectedImporter) setSelectedImporter(parsed.selectedImporter);
-        if (parsed.importerEmail) setImporterEmail(parsed.importerEmail);
-        if (parsed.importerName) setImporterName(parsed.importerName);
-        if (parsed.customColumns) setCustomColumns(parsed.customColumns);
-        if (parsed.isLoadOrder) setLoadOrderMode(parsed.isLoadOrder);
-        if (parsed.isOrderConfirmed) setIsOrderConfirmed(parsed.isOrderConfirmed);
-        if (parsed.salesContract) setSalesContract(parsed.salesContract);
-        if (parsed.freightData) setFreightData(parsed.freightData);
-        if (parsed.freightResponse) setFreightResponse(parsed.freightResponse);
-        if (parsed.invoiceData) setInvoiceData(parsed.invoiceData);
-        const allIds = new Set(fixedItems.map(item => item.id));
-        setExpandedItems(allIds);
-      } catch (e) {
-        console.error('Error loading saved data:', e);
-      }
-    }
-  }, []);
-
-  // Auto-save effect
-  useEffect(() => {
-    const saveTimeout = setTimeout(() => {
-      autoSave();
-    }, 3000);
-
-    return () => clearTimeout(saveTimeout);
-  }, [importData, orderStatus, reviewItems, selectedImporter, importerEmail, importerName, customColumns, salesContract, freightData, invoiceData]);
-
-  const autoSave = () => {
-    const dataToSave = {
-      ...importData,
-      orderStatus,
-      reviewItems,
-      selectedImporter,
-      importerEmail,
-      importerName,
-      customColumns,
-      isLoadOrder: loadOrderMode,
-      isOrderConfirmed,
-      salesContract,
-      freightData,
-      freightResponse,
-      invoiceData,
-      updatedAt: new Date().toISOString(),
-      currentStep
-    };
-    localStorage.setItem('exportDraft', JSON.stringify(dataToSave));
-  };
-
+  // ------------------------------ toast ------------------------------
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
+  // --------------------------- persistence ---------------------------
+  const buildDraft = () => ({
+    ...importData,
+    orderStatus,
+    reviewItems,
+    selectedImporter,
+    importerEmail,
+    importerName,
+    customColumns,
+    isLoadOrder: loadOrderMode,
+    isOrderConfirmed,
+    salesContract,
+    freightData,
+    freightResponse,
+    invoiceData,
+    exportMode,
+    isInternational,
+    exportType: isInternational ? 'international' : 'local',
+    mode: exportMode,
+    updatedAt: new Date().toISOString(),
+    currentStep: safeStepIndex
+  });
+
+  useEffect(() => {
+    const savedData = localStorage.getItem('exportDraft');
+    if (!savedData) return;
+    try {
+      const parsed = JSON.parse(savedData);
+      const mode = parsed.exportMode || parsed.mode || 'self';
+      setExportMode(mode);
+      const fixedItems = (parsed.items || []).map((item) => ensureItemStructure(item, mode));
+      setImportData((prev) => ({ ...prev, ...parsed, items: fixedItems.length ? fixedItems : prev.items, mode }));
+      if (parsed.orderStatus) setOrderStatus(parsed.orderStatus);
+      if (parsed.reviewItems) setReviewItems(parsed.reviewItems);
+      if (parsed.selectedImporter) setSelectedImporter(parsed.selectedImporter);
+      if (parsed.importerEmail) setImporterEmail(parsed.importerEmail);
+      if (parsed.importerName) setImporterName(parsed.importerName);
+      if (parsed.customColumns) setCustomColumns(parsed.customColumns);
+      if (parsed.isLoadOrder) setLoadOrderMode(parsed.isLoadOrder);
+      if (parsed.isOrderConfirmed) setIsOrderConfirmed(parsed.isOrderConfirmed);
+      if (parsed.salesContract) setSalesContract(parsed.salesContract);
+      if (parsed.freightData) setFreightData((prev) => ({ ...prev, ...parsed.freightData }));
+      if (parsed.freightResponse) setFreightResponse(parsed.freightResponse);
+      if (parsed.invoiceData) setInvoiceData(parsed.invoiceData);
+      if (parsed.isInternational !== undefined) setIsInternational(parsed.isInternational);
+      if (typeof parsed.currentStep === 'number') {
+        const restoredSteps = getSteps(mode, parsed.isInternational ?? true);
+        setCurrentStep(Math.min(parsed.currentStep, restoredSteps.length - 1));
+      }
+      if (parsed.freightData?.freightForwarder) setFreightForwarderName(parsed.freightData.freightForwarder);
+      if (parsed.freightData?.freightForwarderEmail) setFreightForwarderEmail(parsed.freightData.freightForwarderEmail);
+    } catch (e) {
+      console.error('Error loading saved data:', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      localStorage.setItem('exportDraft', JSON.stringify(buildDraft()));
+    }, 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importData, orderStatus, reviewItems, selectedImporter, importerEmail, importerName, customColumns, salesContract, freightData, invoiceData, exportMode, isInternational, currentStep]);
+
   const saveProgress = () => {
     setIsSaving(true);
     setTimeout(() => {
-      const dataToSave = {
-        ...importData,
-        orderStatus,
-        reviewItems,
-        selectedImporter,
-        importerEmail,
-        importerName,
-        customColumns,
-        isLoadOrder: loadOrderMode,
-        isOrderConfirmed,
-        salesContract,
-        freightData,
-        freightResponse,
-        invoiceData,
-        updatedAt: new Date().toISOString(),
-        currentStep
-      };
+      const dataToSave = buildDraft();
       localStorage.setItem('exportDraft', JSON.stringify(dataToSave));
-      
+
       const exportsList = JSON.parse(localStorage.getItem('allExports') || '[]');
-      const existingIndex = exportsList.findIndex(exp => exp.exportNumber === dataToSave.exportNumber);
+      const existingIndex = exportsList.findIndex((exp) => exp.exportNumber && exp.exportNumber === dataToSave.exportNumber);
       if (existingIndex >= 0) {
         exportsList[existingIndex] = dataToSave;
       } else if (dataToSave.exportNumber) {
         exportsList.push(dataToSave);
       }
       localStorage.setItem('allExports', JSON.stringify(exportsList));
-      
+
       setIsSaving(false);
       setSavedSuccess(true);
       showToast('Progress saved successfully!', 'success');
       setTimeout(() => setSavedSuccess(false), 3000);
-    }, 500);
+    }, 400);
   };
 
+  // --------------------------- progress calc ---------------------------
   const calculateProgress = () => {
     let progress = 0;
-    if (importData.items.length > 0) progress += 12;
-    if (orderStatus !== 'draft') progress += 12;
-    if (orderStatus === 'sent' || orderStatus === 'review') progress += 12;
-    if (orderStatus === 'confirmed') progress += 12;
-    if (salesContract.contractNumber) progress += 12;
-    if (invoiceData.paymentStatus === 'paid') progress += 12;
-    if (freightData.status === 'accepted' || freightData.status === 'completed') progress += 12;
-    if (orderStatus === 'finalized') progress += 16;
-    return progress;
+    if (importData.items.length > 0) progress += 10;
+    if (orderStatus !== 'draft') progress += 10;
+    if (orderStatus === 'sent' || orderStatus === 'review') progress += 10;
+    if (orderStatus === 'confirmed') progress += 10;
+    if (salesContract.contractNumber) progress += 10;
+    if (invoiceData.paymentStatus === 'paid') progress += 10;
+    if (freightData.status === 'accepted' || freightData.status === 'completed') progress += 10;
+    if (freightData.paymentConfirmed) progress += 10;
+    if (orderStatus === 'finalized') progress += 20;
+    return Math.min(progress, 100);
   };
 
   useEffect(() => {
-    const progress = calculateProgress();
-    setImportData(prev => ({ ...prev, progress }));
+    setImportData((prev) => {
+      const progress = calculateProgress();
+      return prev.progress === progress ? prev : { ...prev, progress };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importData.items, orderStatus, salesContract, invoiceData, freightData]);
 
-  // Load order from request
+  // ---------------------- load order from request ----------------------
   const loadOrderFromRequest = (request) => {
     if (!request) return;
-    
-    const newItems = request.items.map(item => ensureItemStructure({
-      id: Date.now() + Math.random() * 1000,
-      itemCode: `ITEM-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
-      itemName: item.itemName,
-      itemGroup: '',
-      stockUOM: 'Pieces',
-      barcode: '',
-      standardSellingRate: item.unitPrice || '',
-      quantity: item.quantity,
-      unitPrice: item.unitPrice || '',
-      totalValue: item.totalValue || (parseFloat(item.quantity) * parseFloat(item.unitPrice || 0)).toString(),
-      status: 'pending',
-      importerStatus: 'pending',
-      importerNotes: '',
-      importerQuantity: '',
-      customFields: {}
-    }));
 
-    setImportData(prev => ({
+    const newItems = request.items.map((item, idx) =>
+      ensureItemStructure(
+        {
+          id: Date.now() + idx,
+          itemCode: `ITEM-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+          itemName: item.itemName,
+          itemGroup: '',
+          stockUOM: 'Pieces',
+          barcode: '',
+          standardSellingRate: item.unitPrice || '',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice || '',
+          totalValue: item.totalValue || String((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)),
+          isImporterOrder: true,
+          importerId: request.id,
+          importerName: request.importerName,
+          importerEmail: request.importerEmail
+        },
+        'importer'
+      )
+    );
+
+    setImportData((prev) => ({
       ...prev,
       items: newItems,
       isLoadOrder: true,
-      originalRequestId: request.id
+      originalRequestId: request.id,
+      mode: 'importer'
     }));
 
     setImporterName(request.importerName);
@@ -586,159 +1018,61 @@ const NewExport = () => {
     setSelectedImporter(request.importerId || '');
     setOrderStatus('sent');
     setIsOrderConfirmed(true);
-    
+    setExportMode('importer');
     showToast('Order loaded successfully from request!', 'success');
   };
 
-  // Load multiple orders at once
-  const loadMultipleOrders = (requests) => {
-    if (!requests || requests.length === 0) return;
-    
-    let allItems = [];
-    let firstRequest = requests[0];
-    
-    requests.forEach((request, idx) => {
-      const items = request.items.map(item => ensureItemStructure({
-        id: Date.now() + Math.random() * 1000 + idx,
-        itemCode: `ITEM-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
-        itemName: item.itemName,
-        itemGroup: '',
-        stockUOM: 'Pieces',
-        barcode: '',
-        standardSellingRate: item.unitPrice || '',
-        quantity: item.quantity,
-        unitPrice: item.unitPrice || '',
-        totalValue: item.totalValue || (parseFloat(item.quantity) * parseFloat(item.unitPrice || 0)).toString(),
-        status: 'pending',
-        importerStatus: 'pending',
-        importerNotes: '',
-        importerQuantity: '',
-        customFields: {
-          orderId: request.id,
-          importerName: request.importerName
-        }
-      }));
-      allItems = [...allItems, ...items];
-    });
-
-    setImportData(prev => ({
-      ...prev,
-      items: allItems,
-      isLoadOrder: true,
-      originalRequestId: requests.map(r => r.id).join(',')
-    }));
-
-    if (firstRequest) {
-      setImporterName(firstRequest.importerName);
-      setImporterEmail(firstRequest.importerEmail);
-    }
-    setOrderStatus('sent');
-    setIsOrderConfirmed(true);
-    setBatchOrders(requests);
-    setShowBatchLoadModal(false);
-    
-    showToast(`${allItems.length} items loaded from ${requests.length} orders successfully!`, 'success');
-  };
-
-  // Handle order request actions
-  const handleRequestAction = (requestId, action) => {
-    const request = orderRequests.find(r => r.id === requestId);
-    if (!request) return;
-
-    setSelectedRequest(request);
-    setRequestAction(action);
-    setRequestNotes('');
-    setShowRequestModal(true);
-  };
-
-  // Handle batch order selection
-  const handleBatchOrderSelection = () => {
-    const selectedRequests = orderRequests.filter(r => 
-      selectedMultipleOrders.has(r.id) && r.status === 'pending'
-    );
-    if (selectedRequests.length === 0) {
-      showToast('Please select at least one pending order', 'error');
-      return;
-    }
-    loadMultipleOrders(selectedRequests);
-  };
-
-  const confirmRequestAction = () => {
-    if (!selectedRequest) return;
-
-    const updatedRequests = orderRequests.map(req => {
-      if (req.id === selectedRequest.id) {
-        return {
-          ...req,
-          status: requestAction === 'accept' ? 'accepted' : 
-                  requestAction === 'reject' ? 'rejected' : 'referred',
-          responseDate: new Date().toISOString(),
-          responseNotes: requestNotes
-        };
-      }
-      return req;
-    });
-
-    setOrderRequests(updatedRequests);
-    localStorage.setItem('orderRequests', JSON.stringify(updatedRequests));
-
-    if (requestAction === 'accept') {
-      loadOrderFromRequest(selectedRequest);
+  useEffect(() => {
+    const stateData = location.state;
+    if (stateData && stateData.requestData) {
+      setExportMode('importer');
+      loadOrderFromRequest(stateData.requestData);
+      setLoadOrderMode(true);
       setCurrentStep(1);
-      showToast('Order accepted and loaded successfully!', 'success');
-    } else {
-      showToast(`Order ${requestAction === 'reject' ? 'rejected' : 'referred'} successfully!`, 
-                requestAction === 'reject' ? 'error' : 'info');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
 
-    setShowRequestModal(false);
-    setSelectedRequest(null);
-    setRequestAction('');
-    setRequestNotes('');
+  // ----------------------------- item CRUD -----------------------------
+  const recalcTotal = (item) => {
+    const qty = parseFloat(item.quantity);
+    const price = parseFloat(item.unitPrice);
+    if (Number.isNaN(qty) || Number.isNaN(price)) return item;
+    return { ...item, totalValue: String(qty * price) };
   };
 
-  // Handle freight forwarder response
-  const handleFreightResponse = (action, notes) => {
-    setFreightData(prev => ({
+  const updateItemField = (itemId, field, value) => {
+    setImportData((prev) => ({
       ...prev,
-      status: action,
-      response: {
-        action,
-        notes,
-        date: new Date().toISOString()
-      }
+      items: prev.items.map((item) => {
+        if (item.id !== itemId) return item;
+        let updated = setNested(item, field, value);
+        if (field === 'quantity' || field === 'unitPrice') updated = recalcTotal(updated);
+        return updated;
+      })
     }));
-    setFreightResponse({ action, notes, date: new Date().toISOString() });
-    setShowFreightModal(false);
-    showToast(`Freight forwarder ${action === 'accept' ? 'accepted' : action === 'reject' ? 'rejected' : 'referred'} the shipment`, 
-              action === 'accept' ? 'success' : action === 'reject' ? 'error' : 'info');
   };
 
   const addRow = () => {
-    const newItem = ensureItemStructure({
-      id: Date.now(),
-      itemCode: `ITEM-${String(importData.items.length + 1).padStart(3, '0')}`,
-      itemName: '',
-      itemGroup: '',
-      stockUOM: '',
-      barcode: '',
-      standardSellingRate: '',
-      quantity: '',
-      unitPrice: '',
-      totalValue: '',
-      status: 'pending',
-      importerStatus: 'pending',
-      importerNotes: '',
-      importerQuantity: '',
-      customFields: {}
-    });
-    
-    setImportData(prev => ({
-      ...prev,
-      items: [...prev.items, newItem]
-    }));
-    setExpandedItems(prev => new Set(prev).add(newItem.id));
-    showToast('New row added! Fill in the details.', 'success');
+    const newItem = ensureItemStructure(
+      {
+        id: Date.now(),
+        itemCode: `ITEM-${String(importData.items.length + 1).padStart(3, '0')}`,
+        itemName: '',
+        itemGroup: '',
+        stockUOM: '',
+        barcode: '',
+        standardSellingRate: '',
+        quantity: '',
+        unitPrice: '',
+        totalValue: '',
+        customFields: customColumns.reduce((acc, col) => ({ ...acc, [col.key]: '' }), {})
+      },
+      exportMode
+    );
+
+    setImportData((prev) => ({ ...prev, items: [...prev.items, newItem] }));
+    showToast('New row added. Fill in the details.', 'success');
   };
 
   const removeItem = (itemId) => {
@@ -746,15 +1080,7 @@ const NewExport = () => {
       showToast('You need at least one item', 'error');
       return;
     }
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
-    }));
-    setExpandedItems(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(itemId);
-      return newSet;
-    });
+    setImportData((prev) => ({ ...prev, items: prev.items.filter((item) => item.id !== itemId) }));
     showToast('Item removed', 'info');
   };
 
@@ -767,16 +1093,13 @@ const NewExport = () => {
       showToast('Cannot delete all items. Keep at least one item.', 'error');
       return;
     }
-    
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${selectedRows.size} selected item(s)?`);
-    if (confirmDelete) {
-      setImportData(prev => ({
-        ...prev,
-        items: prev.items.filter(item => !selectedRows.has(item.id))
-      }));
-      setSelectedRows(new Set());
-      showToast(`${selectedRows.size} item(s) deleted successfully!`, 'success');
-    }
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Are you sure you want to delete ${selectedRows.size} selected item(s)?`)) return;
+
+    const count = selectedRows.size;
+    setImportData((prev) => ({ ...prev, items: prev.items.filter((item) => !selectedRows.has(item.id)) }));
+    setSelectedRows(new Set());
+    showToast(`${count} item(s) deleted successfully!`, 'success');
   };
 
   const bulkDuplicateItems = () => {
@@ -784,24 +1107,47 @@ const NewExport = () => {
       showToast('No items selected', 'error');
       return;
     }
-    
-    const itemsToDuplicate = importData.items.filter(item => selectedRows.has(item.id));
-    const duplicatedItems = itemsToDuplicate.map(item => {
-      const newId = Date.now() + Math.random();
-      return ensureItemStructure({
-        ...item,
-        id: newId,
-        itemCode: `${item.itemCode}-COPY`,
-        customFields: { ...item.customFields }
-      });
-    });
-    
-    setImportData(prev => ({
-      ...prev,
-      items: [...prev.items, ...duplicatedItems]
-    }));
+    const itemsToDuplicate = importData.items.filter((item) => selectedRows.has(item.id));
+    const duplicatedItems = itemsToDuplicate.map((item, idx) =>
+      ensureItemStructure(
+        {
+          ...item,
+          id: Date.now() + idx,
+          itemCode: `${item.itemCode}-COPY`,
+          customFields: { ...item.customFields }
+        },
+        exportMode
+      )
+    );
+    setImportData((prev) => ({ ...prev, items: [...prev.items, ...duplicatedItems] }));
     setSelectedRows(new Set());
     showToast(`${duplicatedItems.length} item(s) duplicated successfully!`, 'success');
+  };
+
+  const buildExportRows = (items) =>
+    items.map((item) => {
+      const row = {
+        'Item Code': item.itemCode,
+        'Item Name': item.itemName,
+        'Item Group': item.itemGroup,
+        'Stock UOM': item.stockUOM,
+        Barcode: item.barcode,
+        'Standard Selling Rate': item.standardSellingRate,
+        Quantity: item.quantity,
+        'Unit Price': item.unitPrice,
+        'Total Value': item.totalValue
+      };
+      customColumns.forEach((col) => {
+        row[col.name] = item.customFields?.[col.key] || '';
+      });
+      return row;
+    });
+
+  const writeWorkbook = (rows, filename) => {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Items');
+    XLSX.writeFile(wb, filename);
   };
 
   const bulkExportItems = () => {
@@ -809,66 +1155,62 @@ const NewExport = () => {
       showToast('No items selected', 'error');
       return;
     }
-    
-    const itemsToExport = importData.items.filter(item => selectedRows.has(item.id));
-    const exportData = itemsToExport.map(item => ({
-      'Item Code': item.itemCode,
-      'Item Name': item.itemName,
-      'Item Group': item.itemGroup,
-      'Stock UOM': item.stockUOM,
-      'Barcode': item.barcode,
-      'Standard Selling Rate': item.standardSellingRate,
-      'Quantity': item.quantity,
-      'Unit Price': item.unitPrice,
-      'Total Value': item.totalValue,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Items');
-    XLSX.writeFile(wb, `Selected_Items_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const itemsToExport = importData.items.filter((item) => selectedRows.has(item.id));
+    writeWorkbook(buildExportRows(itemsToExport), `Selected_Items_${new Date().toISOString().split('T')[0]}.xlsx`);
     setSelectedRows(new Set());
     showToast(`${itemsToExport.length} item(s) exported successfully!`, 'success');
   };
 
-  const updateItemField = (itemId, field, value) => {
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? { ...item, [field]: value } : item
-      )
-    }));
+  const exportAllItems = () => {
+    writeWorkbook(buildExportRows(importData.items), `Export_Items_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast('Items exported successfully!', 'success');
   };
 
-  const updateCustomField = (itemId, field, value) => {
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          customFields: { ...item.customFields, [field]: value }
-        } : item
-      )
-    }));
+  const importItemsFromFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+        const newItems = jsonData.map((row, index) =>
+          ensureItemStructure(
+            {
+              id: Date.now() + index,
+              itemCode: row['Item Code'] || row.itemCode || `ITEM-${String(index + 1).padStart(3, '0')}`,
+              itemName: row['Item Name'] || row.itemName || '',
+              itemGroup: row['Item Group'] || row.itemGroup || '',
+              stockUOM: row['Stock UOM'] || row.stockUOM || '',
+              barcode: row.Barcode || row.barcode || '',
+              standardSellingRate: row['Standard Selling Rate'] || row.standardSellingRate || '',
+              quantity: row.Quantity || row.quantity || '',
+              unitPrice: row['Unit Price'] || row.unitPrice || '',
+              totalValue: row['Total Value'] || row.totalValue || ''
+            },
+            exportMode
+          )
+        );
+        setImportData((prev) => ({ ...prev, items: [...prev.items, ...newItems] }));
+        showToast(`Successfully imported ${newItems.length} items!`, 'success');
+      } catch (error) {
+        showToast('Error importing file', 'error');
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
+  // --------------------------- custom columns ---------------------------
   const addCustomColumn = () => {
     if (!newColumnName.trim()) {
       showToast('Please enter a column name', 'error');
       return;
     }
     const columnKey = `custom_${newColumnName.toLowerCase().replace(/\s+/g, '_')}`;
-    setCustomColumns([...customColumns, { 
-      key: columnKey, 
-      name: newColumnName, 
-      type: newColumnType 
-    }]);
-    setImportData(prev => ({
+    setCustomColumns((prev) => [...prev, { key: columnKey, name: newColumnName, type: newColumnType }]);
+    setImportData((prev) => ({
       ...prev,
-      items: prev.items.map(item => ({
-        ...item,
-        customFields: { ...item.customFields, [columnKey]: '' }
-      }))
+      items: prev.items.map((item) => ({ ...item, customFields: { ...item.customFields, [columnKey]: '' } }))
     }));
     setNewColumnName('');
     setNewColumnType('text');
@@ -877,3092 +1219,449 @@ const NewExport = () => {
   };
 
   const removeCustomColumn = (columnKey) => {
-    setCustomColumns(customColumns.filter(col => col.key !== columnKey));
-    setImportData(prev => ({
+    setCustomColumns((prev) => prev.filter((col) => col.key !== columnKey));
+    setImportData((prev) => ({
       ...prev,
-      items: prev.items.map(item => {
-        const { [columnKey]: removed, ...rest } = item.customFields;
+      items: prev.items.map((item) => {
+        const rest = { ...item.customFields };
+        delete rest[columnKey];
         return { ...item, customFields: rest };
       })
     }));
     showToast('Column removed', 'info');
   };
 
-  const updatePVoCField = (itemId, field, value) => {
-    setImportData(prev => ({
+  const customColumnDefs = customColumns.map((col) => ({
+    key: `customFields.${col.key}`,
+    removeKey: col.key,
+    label: col.name,
+    type: col.type === 'select' ? 'text' : col.type,
+    editable: true,
+    removable: true
+  }));
+
+  // ---------------------------- uploads ----------------------------
+  const appendItemDocuments = async (itemId, section, files, { statusValue } = {}) => {
+    const fileArray = Array.isArray(files) ? files : [files];
+    const docs = await Promise.all(fileArray.map((file, idx) => readFileAsDocument(file, idx)));
+    setImportData((prev) => ({
       ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          pvoc: { 
-            ...item.pvoc, 
-            uploadedDocuments: item.pvoc?.uploadedDocuments || [],
-            [field]: value 
-          }
-        } : item
+      items: prev.items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              [section]: {
+                ...item[section],
+                uploadedDocuments: [...(item[section]?.uploadedDocuments || []), ...docs],
+                ...(statusValue ? { status: statusValue } : {})
+              }
+            }
+          : item
       )
     }));
+    return docs;
   };
 
-  const updateCoCField = (itemId, field, value) => {
-    setImportData(prev => ({
+  const handlePVoCUpload = async (itemId, file) => {
+    await appendItemDocuments(itemId, 'pvoc', file, { statusValue: 'uploaded' });
+    showToast('PVoC document uploaded successfully!', 'success');
+  };
+
+  const handleCoCUpload = async (itemId, file) => {
+    await appendItemDocuments(itemId, 'coc', file, { statusValue: 'uploaded' });
+    showToast('CoC document uploaded successfully!', 'success');
+  };
+
+  const handlePackingListUpload = async (itemId, file) => {
+    await appendItemDocuments(itemId, 'packingList', file);
+    showToast('Packing list document uploaded successfully!', 'success');
+  };
+
+  const handleBillOfLadingUpload = async (itemId, file) => {
+    await appendItemDocuments(itemId, 'billOfLading', file);
+    showToast('Bill of Lading document uploaded successfully!', 'success');
+  };
+
+  const handleTravelDocumentsUpload = async (itemId, files) => {
+    const docs = await appendItemDocuments(itemId, 'travelDocuments', files);
+    showToast(`${docs.length} travel document(s) uploaded!`, 'success');
+  };
+
+  const handleFreightInvoiceUpload = async (itemId, file) => {
+    const docs = await appendItemDocuments(itemId, 'freightInvoice', file, { statusValue: 'uploaded' });
+    setFreightData((prev) => ({
       ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          coc: { 
-            ...item.coc, 
-            uploadedDocuments: item.coc?.uploadedDocuments || [],
-            [field]: value 
-          }
-        } : item
+      freightInvoice: {
+        ...prev.freightInvoice,
+        uploadedDocuments: [...(prev.freightInvoice?.uploadedDocuments || []), ...docs]
+      },
+      status: prev.status === 'pending' ? prev.status : 'invoice_received'
+    }));
+    showToast('Freight Invoice uploaded successfully!', 'success');
+  };
+
+  const handleCommercialInvoiceUpload = async (itemId, file) => {
+    const doc = await readFileAsDocument(file);
+    setImportData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              commercialInvoice: { ...item.commercialInvoice, document: doc, uploadedAt: new Date().toISOString(), status: 'uploaded' }
+            }
+          : item
       )
     }));
+    showToast('Commercial Invoice uploaded successfully!', 'success');
   };
 
-  const updatePackingListField = (itemId, field, value) => {
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          packingList: { 
-            ...item.packingList, 
-            uploadedDocuments: item.packingList?.uploadedDocuments || [],
-            [field]: value 
-          }
-        } : item
-      )
-    }));
-  };
-
-  const updateBillOfLadingField = (itemId, field, value) => {
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          billOfLading: { 
-            ...item.billOfLading, 
-            uploadedDocuments: item.billOfLading?.uploadedDocuments || [],
-            [field]: value 
-          }
-        } : item
-      )
-    }));
-  };
-
-  const handleFileImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploadingFile(true);
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-        
-        const newItems = jsonData.map((row, index) => ensureItemStructure({
-          id: Date.now() + index,
-          itemCode: row['Item Code'] || row['itemCode'] || `ITEM-${String(index + 1).padStart(3, '0')}`,
-          itemName: row['Item Name'] || row['itemName'] || '',
-          itemGroup: row['Item Group'] || row['itemGroup'] || '',
-          stockUOM: row['Stock UOM'] || row['stockUOM'] || '',
-          barcode: row['Barcode'] || row['barcode'] || '',
-          standardSellingRate: row['Standard Selling Rate'] || row['standardSellingRate'] || '',
-          quantity: row['Quantity'] || row['quantity'] || '',
-          unitPrice: row['Unit Price'] || row['unitPrice'] || '',
-          totalValue: row['Total Value'] || row['totalValue'] || '',
-          status: 'pending',
-          importerStatus: 'pending',
-          importerNotes: '',
-          importerQuantity: '',
-          customFields: {}
-        }));
-
-        const allKeys = Object.keys(jsonData[0] || {});
-        const standardKeys = ['Item Code', 'itemCode', 'Item Name', 'itemName', 'Item Group', 'itemGroup', 'Stock UOM', 'stockUOM', 'Barcode', 'barcode', 'Standard Selling Rate', 'standardSellingRate', 'Quantity', 'quantity', 'Unit Price', 'unitPrice', 'Total Value', 'totalValue'];
-        const customKeys = allKeys.filter(key => !standardKeys.includes(key));
-        
-        const newCustomColumns = customKeys.map(key => ({
-          key: `custom_${key.toLowerCase().replace(/\s+/g, '_')}`,
-          name: key,
-          type: 'text'
-        }));
-        
-        setCustomColumns([...customColumns, ...newCustomColumns]);
-
-        setImportData(prev => ({
-          ...prev,
-          items: [...prev.items, ...newItems]
-        }));
-        setUploadingFile(false);
-        showToast(`Successfully imported ${newItems.length} items!`, 'success');
-      } catch (error) {
-        setUploadingFile(false);
-        showToast('Error importing file. Please check the format.', 'error');
-        console.error('Import error:', error);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = '';
-  };
-
-  const handleExport = () => {
-    const standardHeaders = {
-      'Item Code': 'itemCode',
-      'Item Name': 'itemName',
-      'Item Group': 'itemGroup',
-      'Stock UOM': 'stockUOM',
-      'Barcode': 'barcode',
-      'Standard Selling Rate': 'standardSellingRate',
-      'Quantity': 'quantity',
-      'Unit Price': 'unitPrice',
-      'Total Value': 'totalValue',
-    };
-
-    const customHeaders = customColumns.reduce((acc, col) => {
-      acc[col.name] = col.key;
-      return acc;
-    }, {});
-
-    const allHeaders = { ...standardHeaders, ...customHeaders };
-
-    const exportData = importData.items.map(item => {
-      const row = {};
-      Object.entries(allHeaders).forEach(([displayName, field]) => {
-        if (field.startsWith('custom_')) {
-          row[displayName] = item.customFields?.[field] || '';
-        } else {
-          row[displayName] = item[field] || '';
-        }
-      });
-      return row;
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Items');
-    XLSX.writeFile(wb, `Export_Items_${new Date().toISOString().split('T')[0]}.xlsx`);
-    showToast('Items exported successfully!', 'success');
-  };
-
-  const handleSendToImporter = () => {
-    if (!selectedImporter && !importerEmail) {
-      showToast('Please select an importer or enter email', 'error');
+  const openDocument = (doc) => {
+    if (!doc) {
+      showToast('No documents uploaded', 'info');
       return;
     }
-
-    setOrderStatus('sent');
-    saveProgress();
-    showToast('Item list sent to importer successfully!', 'success');
+    setViewingDocument(doc);
+    setShowDocumentViewer(true);
   };
 
-  const handleImporterConfirmation = (itemId, status, notes = '', quantity = '') => {
-    setReviewItems(prev => ({
-      ...prev,
-      [itemId]: { status, notes, quantity }
-    }));
+  // --------------------------- derived values ---------------------------
+  const getTotalItemsValue = () => importData.items.reduce((sum, item) => sum + (parseFloat(item.totalValue) || 0), 0);
 
-    setImportData(prev => ({
+  const isItemDocsComplete = (item) => {
+    const hasInvoice = Boolean(item.commercialInvoice?.document);
+    const hasPVoC = (item.pvoc?.uploadedDocuments || []).length > 0;
+    const hasCoC = (item.coc?.uploadedDocuments || []).length > 0;
+    const hasFreightInvoice = isInternational ? (item.freightInvoice?.uploadedDocuments || []).length > 0 : true;
+    const hasTravelDocs = !isInternational ? (item.travelDocuments?.uploadedDocuments || []).length > 0 : true;
+    return hasInvoice && hasPVoC && hasCoC && hasFreightInvoice && hasTravelDocs;
+  };
+
+  const allDocsUploaded = importData.items.length > 0 && importData.items.every(isItemDocsComplete);
+  const isTransportConfirmed = ['sent', 'invoice_received', 'accepted', 'completed'].includes(freightData.status);
+
+  const transportOptions = isInternational ? FREIGHT_FORWARDERS : LOCAL_TRANSPORT_COMPANIES;
+  const transportLabel = isInternational ? 'Freight Forwarder' : 'Local Transport Company';
+
+  const goToStepByKey = (key) => {
+    const idx = steps.findIndex((s) => s.key === key);
+    if (idx >= 0) setCurrentStep(idx);
+  };
+
+  const goToNextStep = () => {
+    if (safeStepIndex < steps.length - 1) setCurrentStep(safeStepIndex + 1);
+  };
+
+  // ------------------------- selection helpers -------------------------
+  const toggleRowSelection = (id) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (list) => {
+    setSelectedRows((prev) => (prev.size === list.length ? new Set() : new Set(list.map((item) => item.id))));
+  };
+
+  // ----------------------- importer confirmation -----------------------
+  const handleImporterConfirmation = (itemId, status, notes = '', quantity = '') => {
+    setReviewItems((prev) => ({ ...prev, [itemId]: { status, notes, quantity } }));
+    setImportData((prev) => ({
       ...prev,
-      items: prev.items.map(item => 
+      items: prev.items.map((item) =>
         item.id === itemId ? { ...item, importerStatus: status, importerNotes: notes, importerQuantity: quantity } : item
       )
     }));
 
-    const allItems = importData.items;
-    const allReviewed = allItems.every(item => 
-      (reviewItems[item.id] && reviewItems[item.id].status !== 'pending') || 
-      (item.id === itemId && status !== 'pending')
+    const allReviewed = importData.items.every(
+      (item) =>
+        (item.id === itemId && status !== 'pending') ||
+        (item.id !== itemId && item.importerStatus && item.importerStatus !== 'pending')
     );
 
     if (allReviewed) {
       setOrderStatus('confirmed');
       setIsOrderConfirmed(true);
-      showToast('All items reviewed by importer!', 'success');
+      showToast('All items reviewed! Proceed to Sales Contract.', 'success');
     }
   };
 
-  const handleConfirmOrder = () => {
-    setShowConfirmModal(true);
-  };
-
-  const finalizeOrder = () => {
-    setOrderStatus('finalized');
-    setShowConfirmModal(false);
-    const exportNumber = `EXP-${Date.now().toString().slice(-8)}`;
-    setImportData(prev => ({ ...prev, exportNumber }));
-    showToast(`Order ${exportNumber} finalized successfully!`, 'success');
-  };
-
-  const handleInvoiceUpload = (file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setInvoiceData(prev => ({
-        ...prev,
-        uploadedDocuments: [...(prev.uploadedDocuments || []), newDocument]
-      }));
-      showToast(`Invoice document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeInvoiceDocument = (docId) => {
-    setInvoiceData(prev => ({
-      ...prev,
-      uploadedDocuments: (prev.uploadedDocuments || []).filter(doc => doc.id !== docId)
-    }));
-    showToast('Document removed', 'info');
-  };
-
-  const handleSalesContractUpload = (file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setSalesContract(prev => ({
-        ...prev,
-        uploadedDocuments: [...(prev.uploadedDocuments || []), newDocument]
-      }));
-      showToast(`Sales contract document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeSalesContractDocument = (docId) => {
-    setSalesContract(prev => ({
-      ...prev,
-      uploadedDocuments: (prev.uploadedDocuments || []).filter(doc => doc.id !== docId)
-    }));
-    showToast('Document removed', 'info');
-  };
-
-  // Handle invoice document upload in sales contract
-  const handleInvoiceDocumentUpload = (file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setSalesContract(prev => ({
-        ...prev,
-        invoiceDocument: newDocument
-      }));
-      showToast(`Invoice document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeInvoiceDocumentFromContract = () => {
-    setSalesContract(prev => ({
-      ...prev,
-      invoiceDocument: null
-    }));
-    showToast('Invoice document removed', 'info');
-  };
-
-  const addPayment = () => {
-    setInvoiceData(prev => ({
-      ...prev,
-      payments: [
-        ...(prev.payments || []),
-        {
-          id: Date.now(),
-          paymentDate: new Date().toISOString().split('T')[0],
-          amount: '',
-          method: 'bank_transfer',
-          reference: '',
-          notes: ''
-        }
-      ]
-    }));
-  };
-
-  const updatePayment = (index, field, value) => {
-    setInvoiceData(prev => ({
-      ...prev,
-      payments: (prev.payments || []).map((payment, i) =>
-        i === index ? { ...payment, [field]: value } : payment
-      )
-    }));
-  };
-
-  const removePayment = (index) => {
-    setInvoiceData(prev => ({
-      ...prev,
-      payments: (prev.payments || []).filter((_, i) => i !== index)
-    }));
-  };
-
-  const markAsPaid = () => {
-    if ((invoiceData.payments || []).length === 0) {
-      showToast('Please add payment details first', 'error');
+  // --------------------------- transport step ---------------------------
+  const handleSendToFreightForwarder = () => {
+    if (!selectedFreightForwarder && !freightForwarderName) {
+      showToast(`Please select a ${transportLabel.toLowerCase()}`, 'error');
       return;
     }
-    setInvoiceData(prev => ({ ...prev, paymentStatus: 'paid' }));
-    showToast('Invoice marked as paid!', 'success');
+    setFreightData((prev) => ({ ...prev, status: 'sent', goodsSent: true, goodsSentAt: new Date().toISOString() }));
+    saveProgress();
+    showToast(
+      isInternational ? 'Goods sent to freight forwarder! Awaiting their invoice.' : 'Goods sent to local transport company!',
+      'success'
+    );
   };
 
-  const handlePVoCUpload = (itemId, file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setImportData(prev => ({
-        ...prev,
-        items: prev.items.map(item => 
-          item.id === itemId ? {
-            ...item,
-            pvoc: {
-              ...item.pvoc,
-              uploadedDocuments: [...(item.pvoc?.uploadedDocuments || []), newDocument]
-            }
-          } : item
-        )
-      }));
-      showToast(`PVoC document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleCoCUpload = (itemId, file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setImportData(prev => ({
-        ...prev,
-        items: prev.items.map(item => 
-          item.id === itemId ? {
-            ...item,
-            coc: {
-              ...item.coc,
-              uploadedDocuments: [...(item.coc?.uploadedDocuments || []), newDocument]
-            }
-          } : item
-        )
-      }));
-      showToast(`CoC document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handlePackingListUpload = (itemId, file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setImportData(prev => ({
-        ...prev,
-        items: prev.items.map(item => 
-          item.id === itemId ? {
-            ...item,
-            packingList: {
-              ...item.packingList,
-              uploadedDocuments: [...(item.packingList?.uploadedDocuments || []), newDocument]
-            }
-          } : item
-        )
-      }));
-      showToast(`Packing list document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleBillOfLadingUpload = (itemId, file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setImportData(prev => ({
-        ...prev,
-        items: prev.items.map(item => 
-          item.id === itemId ? {
-            ...item,
-            billOfLading: {
-              ...item.billOfLading,
-              uploadedDocuments: [...(item.billOfLading?.uploadedDocuments || []), newDocument]
-            }
-          } : item
-        )
-      }));
-      showToast(`Bill of Lading document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleFreightUpload = (file) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newDocument = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString(),
-        data: reader.result,
-      };
-
-      setFreightData(prev => ({
-        ...prev,
-        uploadedDocuments: [...(prev.uploadedDocuments || []), newDocument]
-      }));
-      showToast(`Freight document uploaded successfully!`, 'success');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeDocument = (itemId, docType, docId) => {
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? {
-          ...item,
-          [docType]: {
-            ...item[docType],
-            uploadedDocuments: (item[docType]?.uploadedDocuments || []).filter(doc => doc.id !== docId)
-          }
-        } : item
-      )
-    }));
-    showToast('Document removed', 'info');
-  };
-
-  const formatCurrency = (amount) => {
-    if (!amount) return 'UGX 0';
-    return `UGX ${Number(amount).toLocaleString()}`;
-  };
-
-  const getTotalItemsValue = () => {
-    return importData.items.reduce((sum, item) => sum + (parseFloat(item.totalValue) || 0), 0);
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
-      case 'available': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-      case 'unavailable': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-      case 'partial': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
-      case 'confirmed': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-      case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-      case 'referred': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
-      case 'completed': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+  // ------------------------------ submit ------------------------------
+  const handleSubmit = () => {
+    const hasValidItems = importData.items.some((item) => item.itemName && item.quantity && item.totalValue);
+    if (!hasValidItems) {
+      showToast('Please add at least one valid item with name, quantity, and value', 'error');
+      setCurrentStep(exportMode === 'self' ? 0 : 1);
+      return;
     }
+
+    const completedData = {
+      ...importData,
+      status: 'complete',
+      exportNumber: importData.exportNumber || `EXP-${Date.now().toString().slice(-8)}`,
+      completedAt: new Date().toISOString(),
+      progress: 100,
+      salesContract,
+      freightData,
+      invoiceData,
+      exportMode,
+      isInternational,
+      exportType: isInternational ? 'international' : 'local'
+    };
+
+    const exportsList = JSON.parse(localStorage.getItem('allExports') || '[]');
+    exportsList.push(completedData);
+    localStorage.setItem('allExports', JSON.stringify(exportsList));
+    localStorage.removeItem('exportDraft');
+
+    setImportData(completedData);
+    setOrderStatus('finalized');
+    showToast(`Export ${completedData.exportNumber} completed successfully!`, 'success');
+    setTimeout(() => navigate('/my-exports'), 1500);
   };
 
-  const getOrderStatusDisplay = (status) => {
-    switch (status) {
-      case 'draft': return 'Draft';
-      case 'sent': return 'Sent to Importer';
-      case 'review': return 'Under Review';
-      case 'confirmed': return 'Confirmed';
-      case 'finalized': return 'Finalized';
-      default: return 'Unknown';
-    }
-  };
+  // ========================================================================
+  // RENDERERS
+  // ======================================================================
 
-  const getFileIcon = (fileType) => {
-    if (fileType === 'application/pdf') return <FileText className="w-4 h-4 text-red-500" />;
-    if (fileType?.includes('image')) return <Image className="w-4 h-4 text-blue-500" />;
-    if (fileType?.includes('spreadsheet') || fileType?.includes('excel')) return <FileSpreadsheet className="w-4 h-4 text-green-500" />;
-    if (fileType?.includes('zip') || fileType?.includes('rar')) return <FileArchive className="w-4 h-4 text-orange-500" />;
-    return <File className="w-4 h-4 text-gray-500" />;
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return '0 B';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  const Toast = ({ message, type }) => {
-    if (!message) return null;
-    
-    const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
-    const icon = type === 'success' ? <CheckCircle className="w-5 h-5" /> : 
-                  type === 'error' ? <AlertCircle className="w-5 h-5" /> : 
-                  <Info className="w-5 h-5" />;
-
-    return (
-      <div className={`fixed top-24 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl text-white ${bgColor}`}>
-        {icon}
-        <span className="text-sm font-medium">{message}</span>
-        <button onClick={() => setToast(null)} className="ml-2 hover:opacity-80">
-          <X className="w-4 h-4" />
+  // Compact export type switcher, shared by both modes
+  const renderExportTypeSwitcher = () => (
+    <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+      <h4 className={`text-sm font-medium mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Export Type</h4>
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={() => {
+            setIsInternational(false);
+            setCurrentStep(0);
+          }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+            !isInternational ? 'text-white' : isDark ? 'bg-gray-600 text-gray-300 hover:bg-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+          style={{ backgroundColor: !isInternational ? colors.primary : undefined }}
+        >
+          <Bus className="w-4 h-4 inline mr-2" />
+          Local Export
+        </button>
+        <button
+          onClick={() => {
+            setIsInternational(true);
+            setCurrentStep(0);
+          }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+            isInternational ? 'text-white' : isDark ? 'bg-gray-600 text-gray-300 hover:bg-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+          style={{ backgroundColor: isInternational ? colors.primary : undefined }}
+        >
+          <Ship className="w-4 h-4 inline mr-2" />
+          International Export
         </button>
       </div>
-    );
-  };
+      <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {isInternational
+          ? 'International exports require a Bill of Lading, a Freight Invoice and a freight forwarder.'
+          : 'Local exports require a packing list, travel documents and a local transport company.'}
+      </p>
+    </div>
+  );
 
-  // Request Action Modal
-  const RequestActionModal = () => {
-    if (!showRequestModal || !selectedRequest) return null;
+  const renderModeSwitcher = (variant = 'compact') => {
+    const cardBase = 'rounded-xl border-2 cursor-pointer transition-all duration-300 hover:shadow-lg';
+    const cardPadding = variant === 'compact' ? 'p-4' : 'p-6';
 
-    const actionLabels = {
-      accept: { title: 'Accept Order Request', color: 'text-green-600 dark:text-green-400', icon: <ThumbsUp className="w-6 h-6" /> },
-      reject: { title: 'Reject Order Request', color: 'text-red-600 dark:text-red-400', icon: <ThumbsDown className="w-6 h-6" /> },
-      refer: { title: 'Refer Order Request', color: 'text-purple-600 dark:text-purple-400', icon: <ExternalLink className="w-6 h-6" /> }
-    };
-
-    const actionInfo = actionLabels[requestAction] || actionLabels.accept;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className={`relative w-full max-w-lg rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-3">
-              <div className={actionInfo.color}>{actionInfo.icon}</div>
-              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {actionInfo.title}
-              </h3>
-            </div>
-            <button
-              onClick={() => setShowRequestModal(false)}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+    const modeCard = (mode, Icon, title, subtitle, bullets) => (
+      <div
+        className={`${cardBase} ${cardPadding} ${exportMode === mode ? '' : 'border-gray-300 dark:border-gray-600'}`}
+        style={exportMode === mode ? { borderColor: colors.primary, backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg } : undefined}
+        onClick={() => {
+          setExportMode(mode);
+          setCurrentStep(0);
+        }}
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-full" style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg }}>
+            <Icon className="w-7 h-7" style={{ color: colors.primary }} />
           </div>
-          <div className="p-6">
-            <div className="mb-4">
-              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <strong>Importer:</strong> {selectedRequest.importerName}
-              </p>
-              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <strong>Items:</strong> {selectedRequest.items.length} items
-              </p>
-              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <strong>Request Date:</strong> {new Date(selectedRequest.requestDate).toLocaleDateString()}
-              </p>
-            </div>
-            <div className="mb-4">
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                {requestAction === 'accept' ? 'Confirmation Notes (Optional)' :
-                 requestAction === 'reject' ? 'Reason for Rejection *' :
-                 'Referral Notes *'}
-              </label>
-              <textarea
-                value={requestNotes}
-                onChange={(e) => setRequestNotes(e.target.value)}
-                rows="4"
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder={
-                  requestAction === 'accept' ? 'Optional: Add any confirmation notes...' :
-                  requestAction === 'reject' ? 'Please provide reason for rejection...' :
-                  'Please provide referral details...'
-                }
-              />
-              {requestAction !== 'accept' && (
-                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  * Required field
-                </p>
-              )}
-            </div>
-            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Items in request:</p>
-              <div className="mt-2 max-h-32 overflow-auto">
-                {selectedRequest.items.map((item, idx) => (
-                  <div key={idx} className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    • {item.itemName} (Qty: {item.quantity})
-                  </div>
+          <div>
+            <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</h3>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{subtitle}</p>
+            {variant === 'full' && (
+              <ul className={`mt-2 text-xs space-y-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {bullets.map((b) => (
+                  <li key={b}>• {b}</li>
                 ))}
-              </div>
-            </div>
-          </div>
-          <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <button
-              onClick={() => setShowRequestModal(false)}
-              className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmRequestAction}
-              className="px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ 
-                backgroundColor: requestAction === 'accept' ? colors.success : 
-                                requestAction === 'reject' ? colors.danger : colors.primary
-              }}
-              disabled={requestAction !== 'accept' && !requestNotes.trim()}
-            >
-              {requestAction === 'accept' ? 'Accept & Load Order' :
-               requestAction === 'reject' ? 'Reject Order' :
-               'Refer Order'}
-            </button>
+              </ul>
+            )}
           </div>
         </div>
+        {exportMode === mode && (
+          <div className="mt-3 text-sm font-medium" style={{ color: colors.primary }}>
+            ✓ Selected
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {modeCard('self', Briefcase, 'Self-Service Export', 'Create your own export order', [
+          'Add items manually or import a sheet',
+          'Create packing list',
+          ...(isInternational ? ['Bill of Lading', 'Send to freight forwarder'] : ['Travel documents', 'Book local transport'])
+        ])}
+        {modeCard('importer', ShoppingBag, 'Importer Order', 'Load and fulfil an order from an importer', [
+          'Load from importer request',
+          'Review and confirm items',
+          'Create sales contract',
+          'Packing list'
+        ])}
       </div>
     );
   };
 
-  // Batch Load Modal
-  const BatchLoadModal = () => {
-    if (!showBatchLoadModal) return null;
-
-    const pendingRequests = orderRequests.filter(r => r.status === 'pending');
-
-    const toggleOrderSelection = (id) => {
-      const newSet = new Set(selectedMultipleOrders);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      setSelectedMultipleOrders(newSet);
-    };
-
-    const toggleAllOrders = () => {
-      if (selectedMultipleOrders.size === pendingRequests.length) {
-        setSelectedMultipleOrders(new Set());
-      } else {
-        setSelectedMultipleOrders(new Set(pendingRequests.map(r => r.id)));
-      }
-    };
-
-    return (
+  const renderLoadOrderModal = () =>
+    showBatchLoadModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
         <div className={`relative w-full max-w-4xl max-h-[80vh] rounded-xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
           <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-3">
-              <Layers className="w-6 h-6 text-blue-500" />
-              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Load Multiple Orders
-              </h3>
-            </div>
-            <button
-              onClick={() => setShowBatchLoadModal(false)}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Load Order Request</h3>
+            <button onClick={() => setShowBatchLoadModal(false)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
               <X className="w-5 h-5" />
             </button>
           </div>
           <div className="p-6 overflow-y-auto max-h-[60vh]">
-            <div className="mb-4 flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {pendingRequests.length} pending orders available
-              </span>
-              <button
-                onClick={toggleAllOrders}
-                className="text-sm text-blue-500 hover:text-blue-600"
-              >
-                {selectedMultipleOrders.size === pendingRequests.length ? 'Deselect All' : 'Select All'}
-              </button>
-            </div>
-            <div className="space-y-3">
-              {pendingRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
-                    selectedMultipleOrders.has(request.id)
-                      ? isDark ? 'border-blue-500 bg-blue-900/20' : 'border-blue-500 bg-blue-50'
-                      : isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => toggleOrderSelection(request.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedMultipleOrders.has(request.id)}
-                        onChange={() => toggleOrderSelection(request.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded border-gray-300"
-                      />
-                      <div>
-                        <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {request.importerName}
-                        </p>
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          {request.items.length} items • {new Date(request.requestDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                        {request.status}
-                      </span>
-                    </div>
-                  </div>
-                  {request.notes && (
-                    <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Notes: {request.notes}
-                    </p>
-                  )}
-                </div>
-              ))}
-              {pendingRequests.length === 0 && (
-                <div className="text-center py-8">
-                  <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
-                  <p className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    No pending orders
-                  </p>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    All orders have been processed
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <button
-              onClick={() => setShowBatchLoadModal(false)}
-              className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleBatchOrderSelection}
-              disabled={selectedMultipleOrders.size === 0}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md disabled:opacity-50"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Layers className="w-4 h-4" />
-              Load {selectedMultipleOrders.size} Order(s)
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Freight Response Modal
-  const FreightResponseModal = () => {
-    if (!showFreightModal) return null;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className={`relative w-full max-w-lg rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-3">
-              <Ship className="w-6 h-6 text-blue-500" />
-              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Freight Forwarder Response
-              </h3>
-            </div>
-            <button
-              onClick={() => setShowFreightModal(false)}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="p-6">
-            <div className="mb-4">
-              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <strong>Freight Forwarder:</strong> {freightData.freightForwarder || freightForwarderName || 'Not selected'}
-              </p>
-              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <strong>Documents Sent:</strong> Packing List, Bill of Lading, Invoice
-              </p>
-            </div>
-            <div className="mb-4">
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Response Action *
-              </label>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setFreightAction('accept');
-                    const notes = prompt('Enter acceptance notes (optional):');
-                    handleFreightResponse('accepted', notes || '');
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.success }}
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                  Accept
-                </button>
-                <button
-                  onClick={() => {
-                    setFreightAction('reject');
-                    const notes = prompt('Enter rejection reason:');
-                    if (notes && notes.trim()) {
-                      handleFreightResponse('rejected', notes);
-                    } else {
-                      showToast('Please provide a reason for rejection', 'error');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.danger }}
-                >
-                  <ThumbsDown className="w-4 h-4" />
-                  Reject
-                </button>
-                <button
-                  onClick={() => {
-                    setFreightAction('refer');
-                    const notes = prompt('Enter referral notes:');
-                    if (notes && notes.trim()) {
-                      handleFreightResponse('referred', notes);
-                    } else {
-                      showToast('Please provide referral details', 'error');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-                  style={{
-                    backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-                    color: colors.primary
-                  }}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Refer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Render Order Requests Management
-  const renderOrderRequests = () => {
-    const pendingRequests = orderRequests.filter(r => r.status === 'pending');
-    const acceptedRequests = orderRequests.filter(r => r.status === 'accepted');
-    const rejectedRequests = orderRequests.filter(r => r.status === 'rejected');
-    const referredRequests = orderRequests.filter(r => r.status === 'referred');
-
-    return (
-      <div className="space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pending</p>
-                <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{pendingRequests.length}</p>
-              </div>
-              <Clock className="w-8 h-8 text-yellow-500" />
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Accepted</p>
-                <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{acceptedRequests.length}</p>
-              </div>
-              <CheckCircle className="w-8 h-8 text-green-500" />
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Referred</p>
-                <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{referredRequests.length}</p>
-              </div>
-              <ExternalLink className="w-8 h-8 text-purple-500" />
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Rejected</p>
-                <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{rejectedRequests.length}</p>
-              </div>
-              <X className="w-8 h-8 text-red-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Option: Load Order or Create New */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div 
-            className={`p-6 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg ${
-              loadOrderMode && !showBatchLoadModal ? `border-${colors.primary} bg-${colors.primaryBg} dark:bg-${colors.primaryBgDark}` : 'border-gray-300 dark:border-gray-600'
-            }`}
-            onClick={() => {
-              setLoadOrderMode(true);
-              showToast('Switch to Load Order mode', 'info');
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <ShoppingBag className="w-8 h-8" style={{ color: colors.primary }} />
-              <div>
-                <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Load Single Order</h4>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Load one order request</p>
-              </div>
-            </div>
-          </div>
-          <div 
-            className={`p-6 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg ${
-              showBatchLoadModal ? `border-${colors.primary} bg-${colors.primaryBg} dark:bg-${colors.primaryBgDark}` : 'border-gray-300 dark:border-gray-600'
-            }`}
-            onClick={() => {
-              setShowBatchLoadModal(true);
-              setLoadOrderMode(true);
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <Layers className="w-8 h-8" style={{ color: colors.primary }} />
-              <div>
-                <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Load Multiple Orders</h4>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Load multiple orders at once</p>
-              </div>
-            </div>
-          </div>
-          <div 
-            className={`p-6 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-lg ${
-              !loadOrderMode && !showBatchLoadModal ? `border-${colors.primary} bg-${colors.primaryBg} dark:bg-${colors.primaryBgDark}` : 'border-gray-300 dark:border-gray-600'
-            }`}
-            onClick={() => {
-              setLoadOrderMode(false);
-              setShowBatchLoadModal(false);
-              showToast('Switch to Create New Order mode', 'info');
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <Plus className="w-8 h-8" style={{ color: colors.primary }} />
-              <div>
-                <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Create New Order</h4>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Create from scratch</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Pending Requests Table - Only show when in Load Order mode */}
-        {loadOrderMode && (
-          <div className={`rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-hidden`}>
-            <div className={`p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-              <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Pending Order Requests
-              </h3>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Review and respond to importers' requests
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Request #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Importer</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Items</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Request Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Notes</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                  {pendingRequests.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="px-4 py-8 text-center">
-                        <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          No pending requests
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    pendingRequests.map((request) => (
-                      <tr key={request.id} className={isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'}>
-                        <td className="px-4 py-3 font-mono text-xs">{request.id}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{request.importerName}</div>
-                          <div className="text-xs text-gray-500">{request.importerEmail}</div>
-                        </td>
-                        <td className="px-4 py-3">{request.items.length} items</td>
-                        <td className="px-4 py-3">{new Date(request.requestDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 max-w-[150px] truncate">{request.notes || '-'}</td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleRequestAction(request.id, 'accept')}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-                              style={{ backgroundColor: colors.success }}
-                            >
-                              <ThumbsUp className="w-3 h-3" />
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => handleRequestAction(request.id, 'reject')}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-                              style={{ backgroundColor: colors.danger }}
-                            >
-                              <ThumbsDown className="w-3 h-3" />
-                              Reject
-                            </button>
-                            <button
-                              onClick={() => handleRequestAction(request.id, 'refer')}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-                              style={{
-                                backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-                                color: colors.primary
-                              }}
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Refer
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Previous Requests */}
-        {(acceptedRequests.length > 0 || rejectedRequests.length > 0 || referredRequests.length > 0) && (
-          <div className={`rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-hidden`}>
-            <div className={`p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-              <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Previous Requests
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Request #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Importer</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Items</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Response</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium">Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-                  {[...acceptedRequests, ...rejectedRequests, ...referredRequests].map((request) => (
-                    <tr key={request.id} className={isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-3 font-mono text-xs">{request.id}</td>
-                      <td className="px-4 py-3">{request.importerName}</td>
-                      <td className="px-4 py-3">{request.items.length} items</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {request.responseDate ? new Date(request.responseDate).toLocaleDateString() : '-'}
-                      </td>
-                      <td className="px-4 py-3 max-w-[150px] truncate">{request.responseNotes || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Create New Order Button - Only when not in Load Order mode */}
-        {!loadOrderMode && !showBatchLoadModal && (
-          <button
-            onClick={() => {
-              setCurrentStep(1);
-              showToast('Starting new order creation...', 'success');
-            }}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Plus className="w-4 h-4" />
-            Start Creating New Order
-          </button>
-        )}
-
-        <BatchLoadModal />
-      </div>
-    );
-  };
-
-  // Render Sales Contract & Invoice Step
-  const renderSalesContractInvoiceStep = () => {
-    const totalItemsValue = getTotalItemsValue();
-    const taxAmount = totalItemsValue * 0.18;
-    const shippingCost = totalItemsValue * 0.05;
-    const totalAmount = totalItemsValue + taxAmount + shippingCost;
-
-    return (
-      <div className="space-y-6">
-        {/* Sales Contract Section */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            <FileSignature className="w-5 h-5" style={{ color: colors.primary }} />
-            Sales Contract
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Contract Number
-              </label>
-              <input
-                type="text"
-                value={salesContract.contractNumber}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, contractNumber: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="e.g., SC-2024-001"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Contract Date
-              </label>
-              <input
-                type="date"
-                value={salesContract.contractDate}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, contractDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Buyer Name
-              </label>
-              <input
-                type="text"
-                value={salesContract.buyerName || importerName}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, buyerName: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="Buyer name"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Seller Name
-              </label>
-              <input
-                type="text"
-                value={salesContract.sellerName || EXPORTER_PROFILE.companyName}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, sellerName: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="Seller name"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Terms of Delivery
-              </label>
-              <input
-                type="text"
-                value={salesContract.termsOfDelivery}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, termsOfDelivery: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="e.g., FOB, CIF, EXW"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Payment Terms
-              </label>
-              <input
-                type="text"
-                value={salesContract.paymentTerms}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, paymentTerms: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="e.g., LC, TT, DP"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Delivery Date
-              </label>
-              <input
-                type="date"
-                value={salesContract.deliveryDate}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, deliveryDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Total Contract Value
-              </label>
-              <input
-                type="text"
-                value={salesContract.totalValue || formatCurrency(totalAmount)}
-                onChange={(e) => setSalesContract(prev => ({ ...prev, totalValue: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="Total value"
-              />
-            </div>
-          </div>
-          
-          {/* Invoice Document Upload Section - Added here */}
-          <div className={`mt-4 p-4 rounded-lg border-2 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Upload Invoice Document
-                </p>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {salesContract.invoiceDocument ? '1 document uploaded' : 'No invoice document uploaded'}
-                </p>
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                className="hidden"
-                id="invoiceDocumentUpload"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    handleInvoiceDocumentUpload(file);
-                  }
-                  e.target.value = '';
-                }}
-              />
-              {!salesContract.invoiceDocument ? (
-                <button
-                  onClick={() => document.getElementById('invoiceDocumentUpload').click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Invoice
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-3 py-1 rounded bg-green-50 dark:bg-green-900/20">
-                    <FileText className="w-4 h-4 text-green-500" />
-                    <span className="text-sm truncate max-w-[150px]">{salesContract.invoiceDocument.name}</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setViewingDocument(salesContract.invoiceDocument);
-                      setShowDocumentViewer(true);
-                    }}
-                    className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Eye className="w-4 h-4 text-blue-500" />
-                  </button>
-                  <button
-                    onClick={removeInvoiceDocumentFromContract}
-                    className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Additional Terms & Conditions
-            </label>
-            <textarea
-              value={salesContract.notes}
-              onChange={(e) => setSalesContract(prev => ({ ...prev, notes: e.target.value }))}
-              rows="3"
-              className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-              placeholder="Any additional terms and conditions..."
-            />
-          </div>
-          <div className={`mt-4 p-4 rounded-lg border-2 border-dashed ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Upload Sales Contract Document
-                </p>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {(salesContract.uploadedDocuments || []).length} document(s)
-                </p>
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                className="hidden"
-                id="salesContractUpload"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    handleSalesContractUpload(file);
-                  }
-                  e.target.value = '';
-                }}
-              />
-              <button
-                onClick={() => document.getElementById('salesContractUpload').click()}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Upload className="w-4 h-4" />
-                Upload
-              </button>
-            </div>
-            {(salesContract.uploadedDocuments || []).map((doc) => (
-              <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-50'} flex items-center justify-between`}>
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {getFileIcon(doc.type)}
-                  <span className="text-sm truncate">{doc.name}</span>
-                  <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(doc.size)}</span>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => {
-                      setViewingDocument(doc);
-                      setShowDocumentViewer(true);
-                    }}
-                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Eye className="w-3 h-3 text-blue-500" />
-                  </button>
-                  <button
-                    onClick={() => removeSalesContractDocument(doc.id)}
-                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="w-3 h-3 text-red-500" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Invoice Section */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            <FileText className="w-5 h-5" style={{ color: colors.primary }} />
-            Invoice
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Invoice Number
-              </label>
-              <input
-                type="text"
-                value={invoiceData.invoiceNumber}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="e.g., INV-2024-001"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Invoice Date
-              </label>
-              <input
-                type="date"
-                value={invoiceData.invoiceDate}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Due Date
-              </label>
-              <input
-                type="date"
-                value={invoiceData.dueDate}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, dueDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Importer Invoice # (Optional)
-              </label>
-              <input
-                type="text"
-                value={invoiceData.importerInvoiceNumber}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, importerInvoiceNumber: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="Importer's invoice number"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Sub Total
-              </label>
-              <input
-                type="text"
-                value={formatCurrency(totalItemsValue)}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'
-                }`}
-                readOnly
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Tax (18%)
-              </label>
-              <input
-                type="text"
-                value={formatCurrency(taxAmount)}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'
-                }`}
-                readOnly
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Shipping Cost
-              </label>
-              <input
-                type="number"
-                value={invoiceData.shippingCost}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, shippingCost: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Total Amount
-              </label>
-              <input
-                type="text"
-                value={formatCurrency(totalAmount + (parseFloat(invoiceData.shippingCost) || 0))}
-                className={`w-full px-3 py-2 rounded-lg border ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'
-                }`}
-                readOnly
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Payment Status
-              </label>
-              <span className={`inline-block px-3 py-2 rounded-lg text-sm font-medium ${
-                invoiceData.paymentStatus === 'paid'
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-              }`}>
-                {invoiceData.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Notes
-            </label>
-            <textarea
-              value={invoiceData.notes}
-              onChange={(e) => setInvoiceData(prev => ({ ...prev, notes: e.target.value }))}
-              rows="2"
-              className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-              placeholder="Any additional notes..."
-            />
-          </div>
-
-          {/* Payments Section */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Payments</h4>
-              <button
-                onClick={addPayment}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Plus className="w-3 h-3" />
-                Add Payment
-              </button>
-            </div>
-            {(invoiceData.payments || []).length > 0 ? (
-              <div className="space-y-2">
-                {(invoiceData.payments || []).map((payment, index) => (
-                  <div key={payment.id} className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'} border ${isDark ? 'border-gray-500' : 'border-gray-200'}`}>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div>
-                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Payment Date
-                        </label>
-                        <input
-                          type="date"
-                          value={payment.paymentDate}
-                          onChange={(e) => updatePayment(index, 'paymentDate', e.target.value)}
-                          className={`w-full px-2 py-1 rounded border text-sm focus:outline-none focus:ring-2 ${
-                            isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          style={{ focusRingColor: colors.primary }}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Amount (UGX)
-                        </label>
-                        <input
-                          type="number"
-                          value={payment.amount}
-                          onChange={(e) => updatePayment(index, 'amount', e.target.value)}
-                          className={`w-full px-2 py-1 rounded border text-sm focus:outline-none focus:ring-2 ${
-                            isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          style={{ focusRingColor: colors.primary }}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Method
-                        </label>
-                        <select
-                          value={payment.method}
-                          onChange={(e) => updatePayment(index, 'method', e.target.value)}
-                          className={`w-full px-2 py-1 rounded border text-sm focus:outline-none focus:ring-2 ${
-                            isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          style={{ focusRingColor: colors.primary }}
-                        >
-                          <option value="bank_transfer">Bank Transfer</option>
-                          <option value="credit_card">Credit Card</option>
-                          <option value="cash">Cash</option>
-                          <option value="cheque">Cheque</option>
-                          <option value="mobile_money">Mobile Money</option>
-                        </select>
-                      </div>
-                      <div className="flex items-end justify-between gap-2">
-                        <div className="flex-1">
-                          <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Reference
-                          </label>
-                          <input
-                            type="text"
-                            value={payment.reference}
-                            onChange={(e) => updatePayment(index, 'reference', e.target.value)}
-                            className={`w-full px-2 py-1 rounded border text-sm focus:outline-none focus:ring-2 ${
-                              isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                            }`}
-                            style={{ focusRingColor: colors.primary }}
-                            placeholder="Ref #"
-                          />
-                        </div>
-                        <button
-                          onClick={() => removePayment(index)}
-                          className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            {orderRequests.filter((r) => r.status === 'pending').length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                <p className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>No pending orders</p>
               </div>
             ) : (
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No payments added yet</p>
+              <div className="space-y-3">
+                {orderRequests
+                  .filter((r) => r.status === 'pending')
+                  .map((request) => (
+                    <div
+                      key={request.id}
+                      className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
+                        isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => {
+                        loadOrderFromRequest(request);
+                        setShowBatchLoadModal(false);
+                        setCurrentStep(1);
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{request.importerName}</p>
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {request.items.length} items • {new Date(request.requestDate).toLocaleDateString()}
+                          </p>
+                          {request.notes && (
+                            <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Notes: {request.notes}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
+                            {request.status}
+                          </span>
+                          <button
+                            className="block mt-2 px-4 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
+                            style={{ backgroundColor: colors.primary }}
+                          >
+                            Load Order
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             )}
           </div>
-
-          {(invoiceData.payments || []).length > 0 && invoiceData.paymentStatus !== 'paid' && (
-            <button
-              onClick={markAsPaid}
-              className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ backgroundColor: colors.success }}
-            >
-              <CheckCircle className="w-4 h-4" />
-              Mark as Paid
-            </button>
-          )}
         </div>
       </div>
     );
-  };
 
-  // Render Packing & Bill of Lading Step
-  const renderPackingBillOfLadingStep = () => {
-    const packingColumns = [
-      { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
-      { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
-      { key: 'quantity', label: 'Quantity', type: 'text', editable: false },
-      { key: 'packingList.packageType', label: 'Package Type', type: 'text', placeholder: 'e.g., Box, Pallet' },
-      { key: 'packingList.numberOfPackages', label: '# Packages', type: 'number', placeholder: 'e.g., 5' },
-      { key: 'packingList.weight', label: 'Weight (kg)', type: 'number', placeholder: 'e.g., 50' },
-      { key: 'packingList.dimensions', label: 'Dimensions', type: 'text', placeholder: 'e.g., 50x40x30 cm' },
-      { key: 'packingList.handlingInstructions', label: 'Handling Instructions', type: 'text', placeholder: 'e.g., Fragile' },
-    ];
+  // STEP 0 (importer mode): Load Order
+  const renderLoadOrderStep = () => (
+    <div className="space-y-6">
+      {renderModeSwitcher('full')}
+      {renderExportTypeSwitcher()}
 
-    const billOfLadingColumns = [
-      { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
-      { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
-      { key: 'billOfLading.billNumber', label: 'Bill Number', type: 'text', placeholder: 'e.g., BL-001' },
-      { key: 'billOfLading.portOfLoading', label: 'Port of Loading', type: 'text', placeholder: 'e.g., Mombasa' },
-      { key: 'billOfLading.portOfDischarge', label: 'Port of Discharge', type: 'text', placeholder: 'e.g., Rotterdam' },
-      { key: 'billOfLading.vesselName', label: 'Vessel Name', type: 'text', placeholder: 'e.g., MSC Maria' },
-      { key: 'billOfLading.containerNumber', label: 'Container #', type: 'text', placeholder: 'e.g., MSCU1234567' },
-      { key: 'billOfLading.sealNumber', label: 'Seal #', type: 'text', placeholder: 'e.g., SEAL123' },
-    ];
-
-    return (
-      <div className="space-y-6">
-        {/* Packing List Section */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              <Boxes className="w-5 h-5" style={{ color: colors.primary }} />
-              Packing List
-            </h3>
-            <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {importData.items.filter(item => item.packingList?.packageType).length} of {importData.items.length} packed
-            </span>
-          </div>
-
-          <OdooTable
-            items={importData.items}
-            columns={packingColumns}
-            onCellEdit={updateItemField}
-            onRowDelete={null}
-            showCheckboxes={false}
-            footer={null}
-            actions={[
-              {
-                label: 'Upload Packing List',
-                icon: <Upload className="w-3 h-3" />,
-                onClick: (item) => {
-                  document.getElementById(`packingUpload-${item.id}`)?.click();
-                }
-              },
-              {
-                label: 'View Documents',
-                icon: <Eye className="w-3 h-3 text-blue-500" />,
-                onClick: (item) => {
-                  const docs = item.packingList?.uploadedDocuments || [];
-                  if (docs.length > 0) {
-                    setViewingDocument(docs[0]);
-                    setShowDocumentViewer(true);
-                  } else {
-                    showToast('No packing list documents uploaded', 'info');
-                  }
-                }
-              }
-            ]}
-            showAddRow={false}
-          />
-          {importData.items.map((item) => (
-            <input
-              key={`packingUpload-${item.id}`}
-              type="file"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-              className="hidden"
-              id={`packingUpload-${item.id}`}
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  handlePackingListUpload(item.id, file);
-                }
-                e.target.value = '';
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Bill of Lading Section */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              <Ship className="w-5 h-5" style={{ color: colors.primary }} />
-              Bill of Lading
-            </h3>
-          </div>
-
-          <OdooTable
-            items={importData.items}
-            columns={billOfLadingColumns}
-            onCellEdit={updateItemField}
-            onRowDelete={null}
-            showCheckboxes={false}
-            footer={null}
-            actions={[
-              {
-                label: 'Upload Bill of Lading',
-                icon: <Upload className="w-3 h-3" />,
-                onClick: (item) => {
-                  document.getElementById(`bolUpload-${item.id}`)?.click();
-                }
-              },
-              {
-                label: 'View Documents',
-                icon: <Eye className="w-3 h-3 text-blue-500" />,
-                onClick: (item) => {
-                  const docs = item.billOfLading?.uploadedDocuments || [];
-                  if (docs.length > 0) {
-                    setViewingDocument(docs[0]);
-                    setShowDocumentViewer(true);
-                  } else {
-                    showToast('No bill of lading documents uploaded', 'info');
-                  }
-                }
-              }
-            ]}
-            showAddRow={false}
-          />
-          {importData.items.map((item) => (
-            <input
-              key={`bolUpload-${item.id}`}
-              type="file"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-              className="hidden"
-              id={`bolUpload-${item.id}`}
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  handleBillOfLadingUpload(item.id, file);
-                }
-                e.target.value = '';
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // Render Send to Freight Forwarder Step
-  const renderSendToFreightForwarderStep = () => {
-    const totalItemsValue = getTotalItemsValue();
-    const freightCost = totalItemsValue * 0.10;
-
-    return (
-      <div className="space-y-6">
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            <Ship className="w-5 h-5" style={{ color: colors.primary }} />
-            Send to Freight Forwarder
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Select Freight Forwarder
-              </label>
-              <select
-                value={selectedFreightForwarder}
-                onChange={(e) => {
-                  setSelectedFreightForwarder(e.target.value);
-                  const ff = FREIGHT_FORWARDERS.find(f => f.id === e.target.value);
-                  if (ff) {
-                    setFreightForwarderName(ff.name);
-                    setFreightForwarderEmail(ff.email);
-                    setFreightData(prev => ({
-                      ...prev,
-                      freightForwarder: ff.name,
-                      freightForwarderEmail: ff.email,
-                      freightForwarderPhone: ff.phone
-                    }));
-                  }
-                }}
-                className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              >
-                <option value="">Select a freight forwarder...</option>
-                {FREIGHT_FORWARDERS.map(ff => (
-                  <option key={ff.id} value={ff.id}>
-                    {ff.name} - {ff.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`}></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className={`px-2 ${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
-                  OR
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Send to External Freight Forwarder
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Freight Forwarder Name"
-                  value={freightForwarderName}
-                  onChange={(e) => {
-                    setFreightForwarderName(e.target.value);
-                    setFreightData(prev => ({ ...prev, freightForwarder: e.target.value }));
-                  }}
-                  className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-                <input
-                  type="email"
-                  placeholder="Freight Forwarder Email"
-                  value={freightForwarderEmail}
-                  onChange={(e) => {
-                    setFreightForwarderEmail(e.target.value);
-                    setFreightData(prev => ({ ...prev, freightForwarderEmail: e.target.value }));
-                  }}
-                  className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Port of Loading
-                </label>
-                <input
-                  type="text"
-                  value={freightData.portOfLoading}
-                  onChange={(e) => setFreightData(prev => ({ ...prev, portOfLoading: e.target.value }))}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                  placeholder="e.g., Mombasa, Kenya"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Port of Discharge
-                </label>
-                <input
-                  type="text"
-                  value={freightData.portOfDischarge}
-                  onChange={(e) => setFreightData(prev => ({ ...prev, portOfDischarge: e.target.value }))}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                  placeholder="e.g., Rotterdam, Netherlands"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Shipping Date
-                </label>
-                <input
-                  type="date"
-                  value={freightData.shippingDate}
-                  onChange={(e) => setFreightData(prev => ({ ...prev, shippingDate: e.target.value }))}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Expected Arrival
-                </label>
-                <input
-                  type="date"
-                  value={freightData.expectedArrival}
-                  onChange={(e) => setFreightData(prev => ({ ...prev, expectedArrival: e.target.value }))}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-            </div>
-
-            {/* Freight Invoice Section */}
-            <div className={`mt-4 p-4 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
-              <h4 className={`font-medium mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Freight Invoice</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Invoice Number
-                  </label>
-                  <input
-                    type="text"
-                    value={freightData.freightInvoice?.invoiceNumber || ''}
-                    onChange={(e) => setFreightData(prev => ({
-                      ...prev,
-                      freightInvoice: { ...prev.freightInvoice, invoiceNumber: e.target.value }
-                    }))}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                    placeholder="Invoice #"
-                  />
-                </div>
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Amount (UGX)
-                  </label>
-                  <input
-                    type="number"
-                    value={freightData.freightInvoice?.amount || freightCost}
-                    onChange={(e) => setFreightData(prev => ({
-                      ...prev,
-                      freightInvoice: { ...prev.freightInvoice, amount: e.target.value }
-                    }))}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Invoice Date
-                  </label>
-                  <input
-                    type="date"
-                    value={freightData.freightInvoice?.invoiceDate || ''}
-                    onChange={(e) => setFreightData(prev => ({
-                      ...prev,
-                      freightInvoice: { ...prev.freightInvoice, invoiceDate: e.target.value }
-                    }))}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                  />
-                </div>
-              </div>
-              <div className="mt-3">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                  className="hidden"
-                  id="freightInvoiceUpload"
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      handleFreightUpload(file);
-                    }
-                    e.target.value = '';
-                  }}
-                />
-                <button
-                  onClick={() => document.getElementById('freightInvoiceUpload').click()}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Upload className="w-3 h-3" />
-                  Upload Freight Invoice
-                </button>
-                {(freightData.uploadedDocuments || []).map((doc) => (
-                  <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-50'} flex items-center justify-between`}>
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {getFileIcon(doc.type)}
-                      <span className="text-sm truncate">{doc.name}</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setViewingDocument(doc);
-                        setShowDocumentViewer(true);
-                      }}
-                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <Eye className="w-3 h-3 text-blue-500" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                if (!selectedFreightForwarder && !freightForwarderName) {
-                  showToast('Please select a freight forwarder', 'error');
-                  return;
-                }
-                setFreightData(prev => ({ ...prev, status: 'sent' }));
-                setShowFreightModal(true);
-                saveProgress();
-                showToast('Documents sent to freight forwarder successfully!', 'success');
-              }}
-              disabled={!selectedFreightForwarder && !freightForwarderName}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Send className="w-4 h-4" />
-              Send to Freight Forwarder
-            </button>
-          </div>
-        </div>
-
-        {/* Freight Status */}
-        {freightData.status !== 'pending' && (
-          <div className={`p-6 rounded-lg border-2 ${
-            freightData.status === 'accepted' 
-              ? isDark ? 'border-green-700 bg-green-900/20' : 'border-green-500 bg-green-50'
-              : freightData.status === 'rejected'
-              ? isDark ? 'border-red-700 bg-red-900/20' : 'border-red-500 bg-red-50'
-              : freightData.status === 'referred'
-              ? isDark ? 'border-purple-700 bg-purple-900/20' : 'border-purple-500 bg-purple-50'
-              : isDark ? 'border-yellow-700 bg-yellow-900/20' : 'border-yellow-500 bg-yellow-50'
-          }`}>
-            <div className="flex items-center gap-3">
-              {freightData.status === 'accepted' && <CheckCircle className="w-8 h-8 text-green-500" />}
-              {freightData.status === 'rejected' && <X className="w-8 h-8 text-red-500" />}
-              {freightData.status === 'referred' && <ExternalLink className="w-8 h-8 text-purple-500" />}
-              {freightData.status === 'sent' && <Clock className="w-8 h-8 text-yellow-500" />}
-              <div>
-                <h4 className={`font-semibold ${
-                  freightData.status === 'accepted' ? 'text-green-700 dark:text-green-400' :
-                  freightData.status === 'rejected' ? 'text-red-700 dark:text-red-400' :
-                  freightData.status === 'referred' ? 'text-purple-700 dark:text-purple-400' :
-                  'text-yellow-700 dark:text-yellow-400'
-                }`}>
-                  {freightData.status.charAt(0).toUpperCase() + freightData.status.slice(1)}
-                </h4>
-                {freightData.response && (
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Response: {freightData.response.notes || 'No additional notes'}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Render Order Finalisation Step
-  const renderOrderFinalisationStep = () => {
-    const getDocCount = (item, type) => {
-      if (!item || !item[type]) return 0;
-      return (item[type].uploadedDocuments || []).length;
-    };
-
-    const getStatus = (item, type) => {
-      if (!item || !item[type]) return 'pending';
-      return item[type].status || 'pending';
-    };
-
-    const finalisationColumns = [
-      { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
-      { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
-      { 
-        key: 'pvocStatus', 
-        label: 'PVoC Status', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(getStatus(item, 'pvoc'))}`}>
-            {getStatus(item, 'pvoc').charAt(0).toUpperCase() + getStatus(item, 'pvoc').slice(1)}
-          </span>
-        )
-      },
-      { 
-        key: 'pvocDocs', 
-        label: 'PVoC Docs', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className="text-sm">
-            {getDocCount(item, 'pvoc')} document(s)
-          </span>
-        )
-      },
-      { 
-        key: 'cocStatus', 
-        label: 'CoC Status', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(getStatus(item, 'coc'))}`}>
-            {getStatus(item, 'coc').charAt(0).toUpperCase() + getStatus(item, 'coc').slice(1)}
-          </span>
-        )
-      },
-      { 
-        key: 'cocDocs', 
-        label: 'CoC Docs', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className="text-sm">
-            {getDocCount(item, 'coc')} document(s)
-          </span>
-        )
-      },
-    ];
-
-    // Check if all required documents are uploaded
-    const allDocsUploaded = importData.items.every(item => {
-      const hasPVoC = (item.pvoc?.uploadedDocuments || []).length > 0;
-      const hasCoC = (item.coc?.uploadedDocuments || []).length > 0;
-      const hasPacking = (item.packingList?.uploadedDocuments || []).length > 0;
-      const hasBOL = (item.billOfLading?.uploadedDocuments || []).length > 0;
-      return hasPVoC && hasCoC && hasPacking && hasBOL;
-    });
-
-    return (
-      <div className="space-y-6">
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            <CheckCircle className="w-5 h-5" style={{ color: colors.primary }} />
-            Order Finalisation
-          </h3>
-          
-          <div className="mb-4">
-            <div className={`p-4 rounded-lg ${allDocsUploaded ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'}`}>
-              <div className="flex items-center gap-3">
-                {allDocsUploaded ? (
-                  <CheckCircle className="w-6 h-6 text-green-500" />
-                ) : (
-                  <AlertCircle className="w-6 h-6 text-yellow-500" />
-                )}
-                <div>
-                  <p className={`font-medium ${allDocsUploaded ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
-                    {allDocsUploaded ? 'All documents uploaded successfully!' : 'Missing required documents'}
-                  </p>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {allDocsUploaded ? 'You can now finalize the export order.' : 'Please ensure all items have PVoC, CoC, Packing List, and Bill of Lading documents.'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <OdooTable
-            items={importData.items}
-            columns={finalisationColumns}
-            onCellEdit={null}
-            onRowDelete={null}
-            showCheckboxes={true}
-            footer={null}
-            actions={[
-              {
-                label: 'Manage PVoC',
-                icon: <Shield className="w-3 h-3" />,
-                onClick: (item) => {
-                  setActivePVoCItem(item.id);
-                  setShowPVoCModal(true);
-                }
-              },
-              {
-                label: 'Manage CoC',
-                icon: <FileCheck className="w-3 h-3" />,
-                onClick: (item) => {
-                  setActiveCoCItem(item.id);
-                  setShowCoCModal(true);
-                }
-              },
-              {
-                label: 'View Documents',
-                icon: <Eye className="w-3 h-3 text-blue-500" />,
-                onClick: (item) => {
-                  const docs = [...(item.pvoc?.uploadedDocuments || []), ...(item.coc?.uploadedDocuments || [])];
-                  if (docs.length > 0) {
-                    setViewingDocument(docs[0]);
-                    setShowDocumentViewer(true);
-                  } else {
-                    showToast('No documents uploaded for this item', 'info');
-                  }
-                }
-              }
-            ]}
-            showAddRow={false}
-          />
-        </div>
-
-        {/* Complete Export Button */}
+      <div className="flex flex-wrap gap-4">
         <button
           onClick={() => {
-            if (!allDocsUploaded) {
-              showToast('Please upload all required documents first', 'error');
-              return;
-            }
-            handleSubmit();
+            setShowBatchLoadModal(true);
+            setLoadOrderMode(true);
           }}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
-          style={{ backgroundColor: allDocsUploaded ? colors.success : colors.primary }}
+          className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+          style={{ backgroundColor: colors.primary }}
         >
-          <CheckCircle className="w-4 h-4" />
-          Complete Export
+          <Layers className="w-4 h-4" />
+          Load Order Request
+        </button>
+        <button
+          onClick={() => {
+            setLoadOrderMode(false);
+            setImportData((prev) => ({
+              ...prev,
+              isLoadOrder: false,
+              originalRequestId: null,
+              items: prev.items.map((item) => ({
+                ...item,
+                isImporterOrder: false,
+                importerId: '',
+                importerName: '',
+                importerEmail: '',
+                importerStatus: 'pending',
+                importerNotes: '',
+                importerQuantity: ''
+              }))
+            }));
+            showToast('Starting new importer order', 'info');
+            setCurrentStep(1);
+          }}
+          className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-lg"
+          style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
+        >
+          <Plus className="w-4 h-4" />
+          Start New Importer Order
         </button>
       </div>
-    );
-  };
 
-  // PVoC Modal
-  const renderPVoCModal = () => {
-    if (!showPVoCModal || !activePVoCItem) return null;
-    const item = importData.items.find(i => i.id === activePVoCItem);
-    if (!item) return null;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className={`relative w-full max-w-2xl max-h-[80vh] rounded-xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              PVoC Management - {item.itemName}
-            </h3>
-            <button
-              onClick={() => {
-                setShowPVoCModal(false);
-                setActivePVoCItem(null);
-              }}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="p-6 overflow-y-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Certificate Number
-                </label>
-                <input
-                  type="text"
-                  value={item.pvoc?.certificateNumber || ''}
-                  onChange={(e) => updatePVoCField(item.id, 'certificateNumber', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                  placeholder="e.g., PVOC-2024-001"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Status
-                </label>
-                <select
-                  value={item.pvoc?.status || 'pending'}
-                  onChange={(e) => updatePVoCField(item.id, 'status', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                >
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="in_review">In Review</option>
-                </select>
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Issue Date
-                </label>
-                <input
-                  type="date"
-                  value={item.pvoc?.issueDate || ''}
-                  onChange={(e) => updatePVoCField(item.id, 'issueDate', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Expiry Date
-                </label>
-                <input
-                  type="date"
-                  value={item.pvoc?.expiryDate || ''}
-                  onChange={(e) => updatePVoCField(item.id, 'expiryDate', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-            </div>
-
-            <div className={`mt-4 p-4 rounded-lg border-2 border-dashed ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Upload PVoC Documents
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {(item.pvoc?.uploadedDocuments || []).length} document(s)
-                  </p>
-                </div>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                  className="hidden"
-                  id={`pvocUpload-${item.id}`}
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      handlePVoCUpload(item.id, file);
-                    }
-                    e.target.value = '';
-                  }}
-                />
-                <button
-                  onClick={() => document.getElementById(`pvocUpload-${item.id}`).click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload
-                </button>
-              </div>
-              {(item.pvoc?.uploadedDocuments || []).map((doc) => (
-                <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-50'} flex items-center justify-between`}>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {getFileIcon(doc.type)}
-                    <span className="text-sm truncate">{doc.name}</span>
-                    <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(doc.size)}</span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => {
-                        setViewingDocument(doc);
-                        setShowDocumentViewer(true);
-                      }}
-                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <Eye className="w-3 h-3 text-blue-500" />
-                    </button>
-                    <button
-                      onClick={() => removeDocument(item.id, 'pvoc', doc.id)}
-                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 className="w-3 h-3 text-red-500" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <button
-              onClick={() => {
-                setShowPVoCModal(false);
-                setActivePVoCItem(null);
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              Close
-            </button>
-            <button
-              onClick={() => {
-                setShowPVoCModal(false);
-                setActivePVoCItem(null);
-                showToast('PVoC details saved!', 'success');
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ backgroundColor: colors.primary }}
-            >
-              Save PVoC
-            </button>
+      {importData.isLoadOrder && importerName && (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <Info className="w-6 h-6 text-blue-500" />
+          <div>
+            <h4 className="font-medium text-blue-700 dark:text-blue-400">Order loaded from {importerName}</h4>
+            <p className="text-sm text-blue-600 dark:text-blue-300">
+              {importData.items.length} item(s) ready for review. Continue to Items Review &amp; Confirm.
+            </p>
           </div>
         </div>
-      </div>
-    );
-  };
+      )}
 
-  // CoC Modal
-  const renderCoCModal = () => {
-    if (!showCoCModal || !activeCoCItem) return null;
-    const item = importData.items.find(i => i.id === activeCoCItem);
-    if (!item) return null;
+      {renderLoadOrderModal()}
+    </div>
+  );
 
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className={`relative w-full max-w-2xl max-h-[80vh] rounded-xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              CoC Management - {item.itemName}
-            </h3>
-            <button
-              onClick={() => {
-                setShowCoCModal(false);
-                setActiveCoCItem(null);
-              }}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="p-6 overflow-y-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Certificate Number
-                </label>
-                <input
-                  type="text"
-                  value={item.coc?.certificateNumber || ''}
-                  onChange={(e) => updateCoCField(item.id, 'certificateNumber', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                  placeholder="e.g., COC-2024-001"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Status
-                </label>
-                <select
-                  value={item.coc?.status || 'pending'}
-                  onChange={(e) => updateCoCField(item.id, 'status', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                >
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="in_review">In Review</option>
-                </select>
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Issue Date
-                </label>
-                <input
-                  type="date"
-                  value={item.coc?.issueDate || ''}
-                  onChange={(e) => updateCoCField(item.id, 'issueDate', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Expiry Date
-                </label>
-                <input
-                  type="date"
-                  value={item.coc?.expiryDate || ''}
-                  onChange={(e) => updateCoCField(item.id, 'expiryDate', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                />
-              </div>
-            </div>
-
-            <div className={`mt-4 p-4 rounded-lg border-2 border-dashed ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Upload CoC Documents
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {(item.coc?.uploadedDocuments || []).length} document(s)
-                  </p>
-                </div>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                  className="hidden"
-                  id={`cocUpload-${item.id}`}
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      handleCoCUpload(item.id, file);
-                    }
-                    e.target.value = '';
-                  }}
-                />
-                <button
-                  onClick={() => document.getElementById(`cocUpload-${item.id}`).click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload
-                </button>
-              </div>
-              {(item.coc?.uploadedDocuments || []).map((doc) => (
-                <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-50'} flex items-center justify-between`}>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {getFileIcon(doc.type)}
-                    <span className="text-sm truncate">{doc.name}</span>
-                    <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(doc.size)}</span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => {
-                        setViewingDocument(doc);
-                        setShowDocumentViewer(true);
-                      }}
-                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <Eye className="w-3 h-3 text-blue-500" />
-                    </button>
-                    <button
-                      onClick={() => removeDocument(item.id, 'coc', doc.id)}
-                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 className="w-3 h-3 text-red-500" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <button
-              onClick={() => {
-                setShowCoCModal(false);
-                setActiveCoCItem(null);
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              Close
-            </button>
-            <button
-              onClick={() => {
-                setShowCoCModal(false);
-                setActiveCoCItem(null);
-                showToast('CoC details saved!', 'success');
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ backgroundColor: colors.primary }}
-            >
-              Save CoC
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Document Viewer Page
-  const DocumentViewerPage = ({ doc, onClose }) => {
-    if (!doc) return null;
-
-    return (
-      <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-gray-900">
-        <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex items-center gap-3 min-w-0">
-            {getFileIcon(doc.type)}
-            <div className="min-w-0">
-              <h3 className={`text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {doc.name}
-              </h3>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {formatFileSize(doc.size)} • Uploaded {new Date(doc.uploadDate).toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = doc.data;
-                link.download = doc.name;
-                link.click();
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        
-        <div className="flex-1 p-6 overflow-auto">
-          {doc.type?.startsWith('image/') ? (
-            <img src={doc.data} alt={doc.name} className="max-w-full max-h-full object-contain mx-auto" />
-          ) : doc.type === 'application/pdf' ? (
-            <iframe 
-              src={doc.data} 
-              className="w-full h-full min-h-[600px] rounded-lg border"
-              title={doc.name}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full py-12">
-              <File className="w-24 h-24 mx-auto mb-4 text-gray-400" />
-              <p className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Preview not available for this file type
-              </p>
-              <button 
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = doc.data;
-                  link.download = doc.name;
-                  link.click();
-                }}
-                className="mt-4 px-6 py-3 rounded-lg text-white text-sm font-medium transition-all duration-200 hover:shadow-lg"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Download className="w-4 h-4 inline mr-2" />
-                Download File
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // Bulk Action Bar Component
-  const BulkActionBar = ({ selectedCount, onDelete, onDuplicate, onExport, onClear }) => {
-    if (selectedCount === 0) return null;
-
-    return (
-      <div className={`flex items-center gap-3 p-3 rounded-lg border-2 mb-4 ${
-        isDark ? 'border-blue-700 bg-blue-900/20' : 'border-blue-300 bg-blue-50'
-      }`}>
-        <div className="flex items-center gap-2">
-          <Check className="w-4 h-4 text-blue-500" />
-          <span className={`text-sm font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
-            {selectedCount} item(s) selected
-          </span>
-        </div>
-        <div className="flex-1"></div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onDuplicate}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-            style={{
-              backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-              color: colors.primary
-            }}
-          >
-            <CopyIcon className="w-3 h-3" />
-            Duplicate
-          </button>
-          <button
-            onClick={onExport}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-            style={{
-              backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-              color: colors.primary
-            }}
-          >
-            <Download className="w-3 h-3" />
-            Export
-          </button>
-          <button
-            onClick={onDelete}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-            style={{ backgroundColor: colors.danger }}
-          >
-            <Trash2 className="w-3 h-3" />
-            Delete
-          </button>
-          <button
-            onClick={onClear}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <X className="w-3 h-3" />
-            Clear
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Odoo-style table component
-  const OdooTable = ({ 
-    items, 
-    columns, 
-    onCellEdit, 
-    onRowDelete, 
-    onRowAdd,
-    onAddColumn,
-    onRemoveColumn,
-    showCheckboxes = true,
-    actions = [],
-    footer = null,
-    showAddRow = true,
-    selectedRows = new Set(),
-    onRowSelect = null,
-    onSelectAll = null,
-    bulkActions = null
-  }) => {
-    const [sortField, setSortField] = useState(null);
-    const [sortDirection, setSortDirection] = useState('asc');
-
-    const handleSort = (field) => {
-      if (sortField === field) {
-        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-      } else {
-        setSortField(field);
-        setSortDirection('asc');
-      }
-    };
-
-    const sortedItems = [...items];
-    if (sortField) {
-      sortedItems.sort((a, b) => {
-        // Handle nested fields like packingList.packageType
-        const getValue = (obj, path) => {
-          const parts = path.split('.');
-          let current = obj;
-          for (const part of parts) {
-            if (current === undefined || current === null) return '';
-            current = current[part];
-          }
-          return current || '';
-        };
-        const aVal = getValue(a, sortField);
-        const bVal = getValue(b, sortField);
-        if (sortDirection === 'asc') {
-          return aVal > bVal ? 1 : -1;
-        } else {
-          return aVal < bVal ? 1 : -1;
-        }
-      });
-    }
-
-    const toggleRow = (id) => {
-      if (onRowSelect) {
-        onRowSelect(id);
-      }
-    };
-
-    const toggleAll = () => {
-      if (onSelectAll) {
-        onSelectAll();
-      }
-    };
-
-    const isAllSelected = items.length > 0 && items.every(item => selectedRows.has(item.id));
-
-    // Helper to render cell content
-    const renderCellContent = (item, col) => {
-      const getValue = (obj, path) => {
-        const parts = path.split('.');
-        let current = obj;
-        for (const part of parts) {
-          if (current === undefined || current === null) return '';
-          current = current[part];
-        }
-        return current || '';
-      };
-
-      if (col.render) {
-        return col.render(item);
-      }
-
-      if (col.editable !== false) {
-        const value = getValue(item, col.key);
-        return (
-          <input
-            type={col.type || 'text'}
-            value={value}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (onCellEdit) {
-                // For nested fields, we need to handle differently
-                if (col.key.includes('.')) {
-                  const parts = col.key.split('.');
-                  const field = parts[parts.length - 1];
-                  const parent = parts.slice(0, -1).join('.');
-                  // This is a simplified approach - for nested updates we need the parent object
-                  // We'll pass the full path and value to the parent handler
-                  onCellEdit(item.id, col.key, val);
-                } else {
-                  onCellEdit(item.id, col.key, val);
-                }
-              }
-            }}
-            className={`w-full px-2 py-1 rounded border focus:outline-none focus:ring-2 bg-transparent ${
-              isDark ? 'border-gray-600 text-white focus:border-gray-400' : 'border-gray-200 text-gray-900 focus:border-gray-400'
-            }`}
-            style={{ focusRingColor: colors.primary }}
-            placeholder={col.placeholder || ''}
-          />
-        );
-      }
-
-      const value = getValue(item, col.key);
-      return <span className={isDark ? 'text-white' : 'text-gray-900'}>{value || '-'}</span>;
-    };
-
-    return (
-      <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className={`flex items-center justify-between p-3 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex items-center gap-2">
-            {showCheckboxes && (
-              <input
-                type="checkbox"
-                checked={isAllSelected}
-                onChange={toggleAll}
-                className="rounded border-gray-300"
-              />
-            )}
-            <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {items.length} items
-            </span>
-            {selectedRows.size > 0 && (
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                • {selectedRows.size} selected
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {onAddColumn && (
-              <button
-                onClick={onAddColumn}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-                style={{
-                  backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-                  color: colors.primary
-                }}
-              >
-                <Plus className="w-3 h-3" />
-                Add Column
-              </button>
-            )}
-            {showAddRow && onRowAdd && (
-              <button
-                onClick={onRowAdd}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Plus className="w-3 h-3" />
-                Add Item
-              </button>
-            )}
-          </div>
-        </div>
-
-        {bulkActions}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-              <tr>
-                {showCheckboxes && (
-                  <th className="px-3 py-2 w-8">
-                    <input
-                      type="checkbox"
-                      checked={isAllSelected}
-                      onChange={toggleAll}
-                      className="rounded border-gray-300"
-                    />
-                  </th>
-                )}
-                {columns.map((col) => (
-                  <th 
-                    key={col.key}
-                    className={`px-3 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors`}
-                    onClick={() => handleSort(col.key)}
-                  >
-                    <div className="flex items-center gap-1">
-                      {col.label}
-                      {sortField === col.key && (
-                        sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                      )}
-                      {col.removable && onRemoveColumn && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRemoveColumn(col.key);
-                          }}
-                          className="ml-1 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/20"
-                        >
-                          <X className="w-3 h-3 text-red-500" />
-                        </button>
-                      )}
-                    </div>
-                  </th>
-                ))}
-                {actions.length > 0 && (
-                  <th className="px-3 py-2 text-center text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
-              {sortedItems.map((item, index) => (
-                <tr key={item.id} className={`${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors ${index % 2 === 0 ? (isDark ? 'bg-gray-800/50' : 'bg-white') : (isDark ? 'bg-gray-700/30' : 'bg-gray-50/50')}`}>
-                  {showCheckboxes && (
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.has(item.id)}
-                        onChange={() => toggleRow(item.id)}
-                        className="rounded border-gray-300"
-                      />
-                    </td>
-                  )}
-                  {columns.map((col) => (
-                    <td key={`${item.id}-${col.key}`} className="px-3 py-2">
-                      {renderCellContent(item, col)}
-                    </td>
-                  ))}
-                  {actions.length > 0 && (
-                    <td className="px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {actions.map((action, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => action.onClick(item)}
-                            className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors ${action.className || ''}`}
-                            title={action.label}
-                          >
-                            {action.icon}
-                          </button>
-                        ))}
-                        {onRowDelete && (
-                          <button
-                            onClick={() => onRowDelete(item.id)}
-                            className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td colSpan={columns.length + (showCheckboxes ? 1 : 0) + (actions.length > 0 ? 1 : 0)} 
-                      className={`px-4 py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <Package className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p>No items added yet</p>
-                    <p className="text-xs mt-1">Click "Add Item" to get started</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-            {footer && (
-              <tfoot className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-                {footer}
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // Render Preparation Step with Odoo-style table
+  // STEP 0 (self mode): Prepare Goods — setup + item table
   const renderPreparationStep = () => {
     const prepColumns = [
       { key: 'itemCode', label: 'Item Code', type: 'text', placeholder: 'e.g., ITEM-001' },
@@ -3973,100 +1672,64 @@ const NewExport = () => {
       { key: 'standardSellingRate', label: 'Standard Rate (UGX)', type: 'number', placeholder: 'e.g., 1200000' },
       { key: 'quantity', label: 'Qty', type: 'number', placeholder: 'e.g., 10' },
       { key: 'unitPrice', label: 'Unit Price (UGX)', type: 'number', placeholder: 'e.g., 1200000' },
-      { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false },
+      { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false }
     ];
 
-    const allColumns = [...prepColumns, ...customColumns.map(col => ({
-      ...col,
-      label: col.name,
-      type: col.type,
-      editable: true,
-      removable: true
-    }))];
+    const allColumns = [...prepColumns, ...customColumnDefs];
+    const labelSpan = allColumns.length; // checkbox col + labels, total cell, actions cell
 
     const footerRow = (
       <tr>
-        <td colSpan="7" className="px-3 py-2 text-right font-medium">Total Value:</td>
-        <td className="px-3 py-2 text-right font-bold">{formatCurrency(getTotalItemsValue())}</td>
-        <td></td>
+        <td colSpan={labelSpan} className="px-3 py-2 text-right font-medium">
+          Total Value:
+        </td>
+        <td className="px-3 py-2 text-right font-bold whitespace-nowrap">{formatCurrency(getTotalItemsValue())}</td>
       </tr>
     );
 
-    const handleRowSelect = (id) => {
-      const newSet = new Set(selectedRows);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      setSelectedRows(newSet);
-    };
-
-    const handleSelectAll = () => {
-      if (selectedRows.size === importData.items.length) {
-        setSelectedRows(new Set());
-      } else {
-        setSelectedRows(new Set(importData.items.map(item => item.id)));
-      }
-    };
-
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4">
+          {renderModeSwitcher('compact')}
+          {renderExportTypeSwitcher()}
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg border" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
           <div className="flex items-center gap-2">
             <UploadCloud className="w-4 h-4" style={{ color: colors.primary }} />
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileImport}
-              className="hidden"
-              id="fileInput"
-            />
             <button
-              onClick={() => document.getElementById('fileInput').click()}
-              disabled={uploadingFile}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md disabled:opacity-50"
+              onClick={() => pickFile((file) => importItemsFromFile(file), { accept: '.csv,.xlsx,.xls' })}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:shadow-md"
               style={{ backgroundColor: colors.primary }}
             >
-              {uploadingFile ? (
-                <>
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-3 h-3" />
-                  Import
-                </>
-              )}
+              <Upload className="w-3 h-3" />
+              Import
             </button>
           </div>
           <button
-            onClick={handleExport}
+            onClick={exportAllItems}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200"
-            style={{
-              backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-              color: colors.primary
-            }}
+            style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
           >
             <Download className="w-3 h-3" />
             Export All
           </button>
-          <div className="flex-1"></div>
-          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            {importData.items.length} items
-          </span>
+          <div className="flex-1" />
+          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{importData.items.length} items</span>
         </div>
 
-        <BulkActionBar 
+        <BulkActionBar
+          isDark={isDark}
           selectedCount={selectedRows.size}
           onDelete={bulkDeleteItems}
           onDuplicate={bulkDuplicateItems}
           onExport={bulkExportItems}
           onClear={() => setSelectedRows(new Set())}
+          themeColors={colors}
         />
 
         <OdooTable
+          isDark={isDark}
           items={importData.items}
           columns={allColumns}
           onCellEdit={updateItemField}
@@ -4074,71 +1737,54 @@ const NewExport = () => {
           onRowAdd={addRow}
           onAddColumn={() => setShowAddColumnModal(true)}
           onRemoveColumn={removeCustomColumn}
-          showCheckboxes={true}
+          showCheckboxes
           footer={footerRow}
-          actions={[]}
-          showAddRow={true}
+          showAddRow
           selectedRows={selectedRows}
-          onRowSelect={handleRowSelect}
-          onSelectAll={handleSelectAll}
+          onRowSelect={toggleRowSelection}
+          onSelectAll={() => toggleSelectAll(importData.items)}
+          themeColors={colors}
         />
 
         {showAddColumnModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className={`relative w-full max-w-md rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
               <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Add Custom Column
-                </h3>
-                <button
-                  onClick={() => setShowAddColumnModal(false)}
-                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
+                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Add Custom Column</h3>
+                <button onClick={() => setShowAddColumnModal(false)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Column Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newColumnName}
-                      onChange={(e) => setNewColumnName(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                      placeholder="e.g., Supplier Code"
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                      Column Type
-                    </label>
-                    <select
-                      value={newColumnType}
-                      onChange={(e) => setNewColumnType(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    >
-                      <option value="text">Text</option>
-                      <option value="number">Number</option>
-                      <option value="date">Date</option>
-                      <option value="select">Select</option>
-                    </select>
-                  </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Column Name *</label>
+                  <input
+                    type="text"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    placeholder="e.g., Supplier Code"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Column Type</label>
+                  <select
+                    value={newColumnType}
+                    onChange={(e) => setNewColumnType(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  >
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="date">Date</option>
+                  </select>
                 </div>
               </div>
               <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <button
-                  onClick={() => setShowAddColumnModal(false)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
+                <button onClick={() => setShowAddColumnModal(false)} className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700">
                   Cancel
                 </button>
                 <button
@@ -4156,11 +1802,11 @@ const NewExport = () => {
     );
   };
 
-  // Render Items Review Step
+  // STEP 1 (self mode): Items Review
   const renderItemsReviewStep = () => {
-    const filteredItems = importData.items.filter(item => {
-      const matchesSearch = item.itemName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.itemCode?.toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredItems = importData.items.filter((item) => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = item.itemName?.toLowerCase().includes(term) || item.itemCode?.toLowerCase().includes(term);
       const matchesFilter = filterStatus === 'all' || item.status === filterStatus;
       return matchesSearch && matchesFilter;
     });
@@ -4171,58 +1817,30 @@ const NewExport = () => {
       { key: 'itemGroup', label: 'Item Group', type: 'text', placeholder: 'e.g., Electronics' },
       { key: 'quantity', label: 'Qty', type: 'number', placeholder: 'e.g., 10' },
       { key: 'unitPrice', label: 'Unit Price (UGX)', type: 'number', placeholder: 'e.g., 1200000' },
-      { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false },
+      { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false }
     ];
 
-    const allReviewColumns = [...reviewColumns, ...customColumns.map(col => ({
-      ...col,
-      label: col.name,
-      type: col.type,
-      editable: true,
-      removable: true
-    }))];
-
-    const handleRowSelectReview = (id) => {
-      const newSet = new Set(selectedRows);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      setSelectedRows(newSet);
-    };
-
-    const handleSelectAllReview = () => {
-      if (selectedRows.size === filteredItems.length) {
-        setSelectedRows(new Set());
-      } else {
-        setSelectedRows(new Set(filteredItems.map(item => item.id)));
-      }
-    };
-
     return (
-      <div>
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+              className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
                 isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
               }`}
-              style={{ focusRingColor: colors.primary }}
             />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+            className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
               isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
             }`}
-            style={{ focusRingColor: colors.primary }}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -4232,212 +1850,169 @@ const NewExport = () => {
           </select>
         </div>
 
-        <BulkActionBar 
+        <BulkActionBar
+          isDark={isDark}
           selectedCount={selectedRows.size}
           onDelete={bulkDeleteItems}
           onDuplicate={bulkDuplicateItems}
           onExport={bulkExportItems}
           onClear={() => setSelectedRows(new Set())}
+          themeColors={colors}
         />
 
         <OdooTable
+          isDark={isDark}
           items={filteredItems}
-          columns={allReviewColumns}
+          columns={[...reviewColumns, ...customColumnDefs]}
           onCellEdit={updateItemField}
           onRowDelete={removeItem}
           onRowAdd={addRow}
-          showCheckboxes={true}
-          footer={null}
-          actions={[]}
-          showAddRow={true}
+          showCheckboxes
+          showAddRow
           selectedRows={selectedRows}
-          onRowSelect={handleRowSelectReview}
-          onSelectAll={handleSelectAllReview}
+          onRowSelect={toggleRowSelection}
+          onSelectAll={() => toggleSelectAll(filteredItems)}
+          emptyMessage="No items match your search"
+          themeColors={colors}
         />
+
+        <div className={`p-4 rounded-lg flex flex-wrap items-center justify-between gap-3 ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+            Total value: <strong>{formatCurrency(getTotalItemsValue())}</strong>
+          </span>
+          <button
+            onClick={() => {
+              goToStepByKey('packingList');
+              saveProgress();
+            }}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <Boxes className="w-4 h-4" />
+            Continue to Packing List
+          </button>
+        </div>
       </div>
     );
   };
 
-  // Render Send to Importer Step
-  const renderSendToImporterStep = () => (
-    <div className="space-y-6">
-      <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-        <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Send Item List to Importer
-        </h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Select System Importer
-            </label>
-            <select
-              value={selectedImporter}
-              onChange={(e) => {
-                setSelectedImporter(e.target.value);
-                const importer = SYSTEM_IMPORTERS.find(s => s.id === e.target.value);
-                if (importer) {
-                  setImporterEmail(importer.email);
-                  setImporterName(importer.name);
-                }
-              }}
-              className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-            >
-              <option value="">Select an importer...</option>
-              {SYSTEM_IMPORTERS.map(importer => (
-                <option key={importer.id} value={importer.id}>
-                  {importer.name} - {importer.email}
-                </option>
-              ))}
-            </select>
-          </div>
+  // Importer mode: Items Review & Confirm
+  const renderImporterReviewStep = () => {
+    const filteredItems = importData.items.filter((item) => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = item.itemName?.toLowerCase().includes(term) || item.itemCode?.toLowerCase().includes(term);
+      const matchesFilter = filterStatus === 'all' || item.importerStatus === filterStatus;
+      return matchesSearch && matchesFilter;
+    });
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`}></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className={`px-2 ${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
-                OR
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Send to External Importer
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Importer Name"
-                value={importerName}
-                onChange={(e) => setImporterName(e.target.value)}
-                className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-              <input
-                type="email"
-                placeholder="Importer Email"
-                value={importerEmail}
-                onChange={(e) => setImporterEmail(e.target.value)}
-                className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleSendToImporter}
-            disabled={!selectedImporter && !importerEmail}
-            className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Send className="w-4 h-4" />
-            Send to Importer
-          </button>
-        </div>
-      </div>
-
-      {orderStatus === 'sent' && (
-        <div className={`p-6 rounded-lg border-2 ${isDark ? 'border-green-700 bg-green-900/20' : 'border-green-500 bg-green-50'}`}>
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-8 h-8 text-green-500" />
-            <div>
-              <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Items Sent Successfully!
-              </h4>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {importData.items.length} items sent to {importerName || 'importer'} at {importerEmail}
-              </p>
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                Waiting for importer confirmation...
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  // Render Importer Confirmation Step
-  const renderImporterConfirmationStep = () => {
-    const confirmationColumns = [
+    const reviewColumns = [
       { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
       { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
       { key: 'quantity', label: 'Requested Qty', type: 'text', editable: false },
       { key: 'importerQuantity', label: 'Confirmed Qty', type: 'number', placeholder: 'e.g., 5' },
-      { key: 'importerStatus', label: 'Status', type: 'text', editable: false },
-      { key: 'importerNotes', label: 'Notes', type: 'text', placeholder: 'Importer notes...' },
+      {
+        key: 'importerStatus',
+        label: 'Status',
+        editable: false,
+        render: (item) => (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.importerStatus || 'pending')}`}>
+            {(item.importerStatus || 'pending').charAt(0).toUpperCase() + (item.importerStatus || 'pending').slice(1)}
+          </span>
+        )
+      },
+      { key: 'importerNotes', label: 'Notes', type: 'text', placeholder: 'Exporter notes...' }
     ];
-
-    const allConfirmationColumns = [...confirmationColumns, ...customColumns.map(col => ({
-      ...col,
-      label: col.name,
-      type: col.type,
-      editable: false
-    }))];
 
     return (
       <div className="space-y-6">
         <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Importer Confirmation Status
-          </h3>
+          <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Review &amp; Confirm Items</h3>
           <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Review importer's response for each item
+            Review the importer&apos;s requested items and confirm availability.
           </p>
 
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+              />
+            </div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="available">Available</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="partial">Partial</option>
+            </select>
+          </div>
+
           <OdooTable
-            items={importData.items}
-            columns={allConfirmationColumns}
+            isDark={isDark}
+            items={filteredItems}
+            columns={[...reviewColumns, ...customColumnDefs.map((c) => ({ ...c, editable: false, removable: false }))]}
             onCellEdit={updateItemField}
-            onRowDelete={null}
-            showCheckboxes={true}
-            footer={null}
+            showCheckboxes
+            showAddRow={false}
+            selectedRows={selectedRows}
+            onRowSelect={toggleRowSelection}
+            onSelectAll={() => toggleSelectAll(filteredItems)}
             actions={[
               {
-                label: 'Update Status',
-                icon: <Edit2 className="w-3 h-3" />,
-                onClick: (item) => {
-                  const status = prompt('Enter status (available/unavailable/partial):', item.importerStatus || 'pending');
-                  if (status && ['available', 'unavailable', 'partial', 'pending'].includes(status)) {
-                    handleImporterConfirmation(item.id, status, item.importerNotes, item.importerQuantity);
-                  }
-                }
+                label: 'Mark Available',
+                icon: <CheckCircle className="w-4 h-4 text-green-500" />,
+                onClick: (item) => handleImporterConfirmation(item.id, 'available', item.importerNotes, item.importerQuantity || item.quantity)
+              },
+              {
+                label: 'Mark Partial',
+                icon: <AlertCircle className="w-4 h-4 text-orange-500" />,
+                onClick: (item) => handleImporterConfirmation(item.id, 'partial', item.importerNotes, item.importerQuantity)
+              },
+              {
+                label: 'Mark Unavailable',
+                icon: <X className="w-4 h-4 text-red-500" />,
+                onClick: (item) => handleImporterConfirmation(item.id, 'unavailable', item.importerNotes, '0')
+              },
+              {
+                label: 'Reset Status',
+                icon: <Edit2 className="w-4 h-4 text-gray-400" />,
+                onClick: (item) => handleImporterConfirmation(item.id, 'pending', item.importerNotes, item.importerQuantity)
               }
             ]}
-            showAddRow={false}
-            selectedRows={new Set()}
-            onRowSelect={() => {}}
-            onSelectAll={() => {}}
+            emptyMessage="No items to review"
+            themeColors={colors}
           />
 
           {orderStatus === 'confirmed' && (
-            <div className="mt-6 flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+            <div className="mt-6 flex flex-wrap items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
               <CheckCircle className="w-8 h-8 text-green-500" />
-              <div className="flex-1">
+              <div className="flex-1 min-w-[220px]">
                 <h4 className="font-semibold text-green-700 dark:text-green-400">All Items Confirmed!</h4>
                 <p className="text-sm text-green-600 dark:text-green-300">
-                  Importer has reviewed all items. You can now proceed to create sales contract and invoice.
+                  All items reviewed and confirmed. Proceed to Sales Contract &amp; Invoice.
                 </p>
               </div>
               <button
                 onClick={() => {
-                  setCurrentStep(4);
+                  goToStepByKey('salesContract');
                   saveProgress();
-                  showToast('Proceeding to Sales Contract & Invoice', 'success');
                 }}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
                 style={{ backgroundColor: colors.primary }}
               >
+                <FileSignature className="w-4 h-4 inline mr-2" />
                 Proceed to Contract
               </button>
             </div>
@@ -4447,77 +2022,874 @@ const NewExport = () => {
     );
   };
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      // Check if order is confirmed before allowing progression to certain steps
-      if ((currentStep === 1 || currentStep === 2) && !isOrderConfirmed && loadOrderMode) {
-        showToast('Please confirm the order first', 'error');
-        return;
+  // Importer mode: Sales Contract & Invoice
+  const renderSalesContractInvoiceStep = () => {
+    const totalItemsValue = getTotalItemsValue();
+    const taxAmount = totalItemsValue * 0.18;
+    const shippingCost = totalItemsValue * 0.05;
+    const totalAmount = totalItemsValue + taxAmount + shippingCost;
+
+    const field = (label, value, onChange, { type = 'text', placeholder = '' } = {}) => (
+      <div>
+        <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{label}</label>
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+            isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+          }`}
+        />
+      </div>
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <h3 className={`text-lg font-semibold mb-2 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <FileSignature className="w-5 h-5" style={{ color: colors.primary }} />
+            Sales Contract &amp; Invoice
+          </h3>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Create the sales contract and send the invoice to the importer.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {field('Contract Number', salesContract.contractNumber, (v) => setSalesContract((p) => ({ ...p, contractNumber: v })), { placeholder: 'e.g., SC-2024-001' })}
+            {field('Contract Date', salesContract.contractDate, (v) => setSalesContract((p) => ({ ...p, contractDate: v })), { type: 'date' })}
+            {field('Buyer (Importer)', salesContract.buyerName || importerName, (v) => setSalesContract((p) => ({ ...p, buyerName: v })), { placeholder: 'Buyer name' })}
+            {field('Seller (Exporter)', salesContract.sellerName || EXPORTER_PROFILE.companyName, (v) => setSalesContract((p) => ({ ...p, sellerName: v })), { placeholder: 'Seller name' })}
+            {field('Terms of Delivery', salesContract.termsOfDelivery, (v) => setSalesContract((p) => ({ ...p, termsOfDelivery: v })), { placeholder: 'e.g., FOB, CIF, EXW' })}
+            {field('Payment Terms', salesContract.paymentTerms, (v) => setSalesContract((p) => ({ ...p, paymentTerms: v })), { placeholder: 'e.g., LC, TT, DP' })}
+            {field('Delivery Date', salesContract.deliveryDate, (v) => setSalesContract((p) => ({ ...p, deliveryDate: v })), { type: 'date' })}
+            {field('Total Contract Value', salesContract.totalValue || formatCurrency(totalAmount), (v) => setSalesContract((p) => ({ ...p, totalValue: v })), { placeholder: 'Total value' })}
+          </div>
+
+          <div className={`mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white border border-gray-200'}`}>
+              Goods value: <strong>{formatCurrency(totalItemsValue)}</strong>
+            </div>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white border border-gray-200'}`}>
+              VAT (18%): <strong>{formatCurrency(taxAmount)}</strong>
+            </div>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white border border-gray-200'}`}>
+              Shipping (5%): <strong>{formatCurrency(shippingCost)}</strong>
+            </div>
+          </div>
+
+          <div className={`mt-4 p-4 rounded-lg border-2 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Upload Invoice Document</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {salesContract.invoiceDocument ? '1 document uploaded' : 'No invoice document uploaded'}
+                </p>
+              </div>
+              {!salesContract.invoiceDocument ? (
+                <button
+                  onClick={() =>
+                    pickFile(async (file) => {
+                      const doc = await readFileAsDocument(file);
+                      setSalesContract((prev) => ({ ...prev, invoiceDocument: doc }));
+                      showToast('Invoice document uploaded!', 'success');
+                    })
+                  }
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload Invoice
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1 rounded bg-green-50 dark:bg-green-900/20">
+                    <FileText className="w-4 h-4 text-green-500" />
+                    <span className="text-sm truncate max-w-[150px]">{salesContract.invoiceDocument.name}</span>
+                  </div>
+                  <button onClick={() => openDocument(salesContract.invoiceDocument)} className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <Eye className="w-4 h-4 text-blue-500" />
+                  </button>
+                  <button
+                    onClick={() => setSalesContract((prev) => ({ ...prev, invoiceDocument: null }))}
+                    className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              if (!salesContract.contractNumber) {
+                showToast('Please enter a contract number', 'error');
+                return;
+              }
+              setOrderStatus('sent');
+              showToast('Sales contract and invoice sent to importer!', 'success');
+              goToStepByKey('packingList');
+              saveProgress();
+            }}
+            className="mt-4 flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <Send className="w-4 h-4" />
+            Send Contract &amp; Invoice to Importer
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Packing List (shared)
+  const renderPackingListStep = () => {
+    const packingColumns = [
+      { key: 'itemCode', label: 'Item Code', editable: false },
+      { key: 'itemName', label: 'Item Name', editable: false },
+      { key: 'quantity', label: 'Qty', editable: false },
+      { key: 'packingList.packageType', label: 'Package Type', type: 'text', placeholder: 'e.g., Box, Pallet' },
+      { key: 'packingList.numberOfPackages', label: '# Packages', type: 'number', placeholder: 'e.g., 5' },
+      { key: 'packingList.weight', label: 'Weight (kg)', type: 'number', placeholder: 'e.g., 50' },
+      { key: 'packingList.dimensions', label: 'Dimensions', type: 'text', placeholder: 'e.g., 50x40x30 cm' },
+      { key: 'packingList.handlingInstructions', label: 'Handling', type: 'text', placeholder: 'e.g., Fragile' },
+      {
+        key: 'packingList.uploadedDocuments',
+        label: 'Document',
+        editable: false,
+        render: (item) => {
+          const docs = item.packingList?.uploadedDocuments || [];
+          return (
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(docs.length ? 'uploaded' : 'pending')}`}>
+              {docs.length ? `${docs.length} file(s)` : 'None'}
+            </span>
+          );
+        }
       }
+    ];
+
+    const packedCount = importData.items.filter((item) => item.packingList?.packageType).length;
+
+    return (
+      <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <Boxes className="w-5 h-5" style={{ color: colors.primary }} />
+            Packing List
+          </h3>
+          <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {packedCount} of {importData.items.length} packed
+          </span>
+        </div>
+
+        <OdooTable
+          isDark={isDark}
+          items={importData.items}
+          columns={packingColumns}
+          onCellEdit={updateItemField}
+          showCheckboxes={false}
+          showAddRow={false}
+          actions={[
+            {
+              label: 'Upload Packing List',
+              icon: <Upload className="w-4 h-4" style={{ color: colors.primary }} />,
+              onClick: (item) => pickFile((file) => handlePackingListUpload(item.id, file))
+            },
+            {
+              label: 'View',
+              icon: <Eye className="w-4 h-4 text-blue-500" />,
+              onClick: (item) => openDocument((item.packingList?.uploadedDocuments || [])[0])
+            }
+          ]}
+          themeColors={colors}
+        />
+
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+          <button
+            onClick={() => {
+              goToNextStep();
+              saveProgress();
+            }}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+            style={{ backgroundColor: colors.primary }}
+          >
+            Continue
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Bill of Lading (international only)
+  const renderBillOfLadingStep = () => {
+    if (!isInternational) {
+      return (
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <Info className="w-6 h-6 text-blue-500" />
+            <div>
+              <h4 className="font-medium text-blue-700 dark:text-blue-400">Local Export</h4>
+              <p className="text-sm text-blue-600 dark:text-blue-300">
+                A Bill of Lading is not required for local exports. You can proceed to the next step.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const bolColumns = [
+      { key: 'itemCode', label: 'Item Code', editable: false },
+      { key: 'itemName', label: 'Item Name', editable: false },
+      { key: 'billOfLading.billNumber', label: 'Bill Number', type: 'text', placeholder: 'e.g., BL-001' },
+      { key: 'billOfLading.portOfLoading', label: 'Port of Loading', type: 'text', placeholder: 'e.g., Mombasa' },
+      { key: 'billOfLading.portOfDischarge', label: 'Port of Discharge', type: 'text', placeholder: 'e.g., Rotterdam' },
+      { key: 'billOfLading.vesselName', label: 'Vessel Name', type: 'text', placeholder: 'e.g., MSC Maria' },
+      { key: 'billOfLading.containerNumber', label: 'Container #', type: 'text', placeholder: 'e.g., MSCU1234567' },
+      { key: 'billOfLading.sealNumber', label: 'Seal #', type: 'text', placeholder: 'e.g., SEAL123' }
+    ];
+
+    return (
+      <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <Ship className="w-5 h-5" style={{ color: colors.primary }} />
+            Bill of Lading
+          </h3>
+          <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {importData.items.filter((i) => i.billOfLading?.billNumber).length} of {importData.items.length} completed
+          </span>
+        </div>
+
+        <OdooTable
+          isDark={isDark}
+          items={importData.items}
+          columns={bolColumns}
+          onCellEdit={updateItemField}
+          showCheckboxes={false}
+          showAddRow={false}
+          actions={[
+            {
+              label: 'Upload BOL',
+              icon: <Upload className="w-4 h-4" style={{ color: colors.primary }} />,
+              onClick: (item) => pickFile((file) => handleBillOfLadingUpload(item.id, file))
+            },
+            {
+              label: 'View',
+              icon: <Eye className="w-4 h-4 text-blue-500" />,
+              onClick: (item) => openDocument((item.billOfLading?.uploadedDocuments || [])[0])
+            }
+          ]}
+          themeColors={colors}
+        />
+
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => {
+              goToNextStep();
+              saveProgress();
+            }}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+            style={{ backgroundColor: colors.primary }}
+          >
+            Continue to Finalise Preparation
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Finalise Preparation (shared)
+  const renderFinalisePreparationStep = () => {
+    const statusBadge = (label, tone) => (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(tone)}`}>{label}</span>
+    );
+
+    const uploadCell = (item, { hasDoc, label, uploadedLabel, onUpload, onView }) => (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onUpload}
+          className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 whitespace-nowrap ${
+            hasDoc
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+          }`}
+        >
+          {hasDoc ? <CheckCircle className="w-3 h-3" /> : <Upload className="w-3 h-3" />}
+          {hasDoc ? uploadedLabel : label}
+        </button>
+        {hasDoc && (
+          <button onClick={onView} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600" title="View document">
+            <Eye className="w-3 h-3 text-blue-500" />
+          </button>
+        )}
+      </div>
+    );
+
+    const finalisationColumns = [
+      { key: 'itemCode', label: 'Item Code', editable: false },
+      { key: 'itemName', label: 'Item Name', editable: false },
+      {
+        key: 'commercialInvoice',
+        label: 'Commercial Invoice',
+        editable: false,
+        render: (item) =>
+          uploadCell(item, {
+            hasDoc: Boolean(item.commercialInvoice?.document),
+            label: 'Upload Invoice',
+            uploadedLabel: 'Uploaded',
+            onUpload: () => pickFile((file) => handleCommercialInvoiceUpload(item.id, file)),
+            onView: () => openDocument(item.commercialInvoice?.document)
+          })
+      },
+      ...(isInternational
+        ? [
+            {
+              key: 'freightInvoice',
+              label: 'Freight Invoice',
+              editable: false,
+              render: (item) => {
+                const docs = item.freightInvoice?.uploadedDocuments || [];
+                return uploadCell(item, {
+                  hasDoc: docs.length > 0,
+                  label: 'Upload Freight Invoice',
+                  uploadedLabel: `${docs.length} docs`,
+                  onUpload: () => pickFile((file) => handleFreightInvoiceUpload(item.id, file)),
+                  onView: () => openDocument(docs[0])
+                });
+              }
+            }
+          ]
+        : [
+            {
+              key: 'travelDocuments',
+              label: 'Travel Documents',
+              editable: false,
+              render: (item) => {
+                const docs = item.travelDocuments?.uploadedDocuments || [];
+                return uploadCell(item, {
+                  hasDoc: docs.length > 0,
+                  label: 'Upload Travel Docs',
+                  uploadedLabel: `${docs.length} docs`,
+                  onUpload: () => pickFile((files) => handleTravelDocumentsUpload(item.id, files), { multiple: true }),
+                  onView: () => openDocument(docs[0])
+                });
+              }
+            }
+          ]),
+      {
+        key: 'pvocStatus',
+        label: 'PVoC Status',
+        editable: false,
+        render: (item) => {
+          const docs = item.pvoc?.uploadedDocuments || [];
+          const status = docs.length ? item.pvoc?.status || 'uploaded' : 'pending';
+          return (
+            <button
+              onClick={() => pickFile((file) => handlePVoCUpload(item.id, file))}
+              className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 ${getStatusColor(status)}`}
+            >
+              {docs.length ? <CheckCircle className="w-3 h-3" /> : <Upload className="w-3 h-3" />}
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {docs.length > 0 && <span className="ml-1">({docs.length})</span>}
+            </button>
+          );
+        }
+      },
+      {
+        key: 'cocStatus',
+        label: 'CoC Status',
+        editable: false,
+        render: (item) => {
+          const docs = item.coc?.uploadedDocuments || [];
+          const status = docs.length ? item.coc?.status || 'uploaded' : 'pending';
+          return (
+            <button
+              onClick={() => pickFile((file) => handleCoCUpload(item.id, file))}
+              className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 ${getStatusColor(status)}`}
+            >
+              {docs.length ? <CheckCircle className="w-3 h-3" /> : <Upload className="w-3 h-3" />}
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {docs.length > 0 && <span className="ml-1">({docs.length})</span>}
+            </button>
+          );
+        }
+      },
+      {
+        key: 'packingDoc',
+        label: 'Packing List',
+        editable: false,
+        render: (item) => {
+          const docs = item.packingList?.uploadedDocuments || [];
+          return statusBadge(docs.length ? `${docs.length} file(s)` : 'Not uploaded', docs.length ? 'uploaded' : 'pending');
+        }
+      }
+    ];
+
+    const nextStepLabel = isInternational ? 'Send to Freight Forwarder' : 'Book Local Transport';
+
+    return (
+      <div className="space-y-6">
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <h3 className={`text-lg font-semibold mb-2 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <PackageCheck className="w-5 h-5" style={{ color: colors.primary }} />
+            Finalise Preparation
+          </h3>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            Upload all required documents for your export shipment.
+            {isInternational
+              ? ' Make sure to upload the Freight Invoice from your freight forwarder.'
+              : ' Travel documents are required for local deliveries.'}
+          </p>
+
+          <div className="mb-4">
+            <div
+              className={`p-4 rounded-lg ${
+                allDocsUploaded
+                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                  : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {allDocsUploaded ? <CheckCircle className="w-6 h-6 text-green-500" /> : <AlertCircle className="w-6 h-6 text-yellow-500" />}
+                <div>
+                  <p className={`font-medium ${allDocsUploaded ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
+                    {allDocsUploaded ? 'All documents uploaded successfully!' : 'Missing required documents'}
+                  </p>
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {allDocsUploaded ? `Ready to ${nextStepLabel.toLowerCase()}.` : 'Please upload all required documents.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <OdooTable
+            isDark={isDark}
+            items={importData.items}
+            columns={finalisationColumns}
+            showCheckboxes={false}
+            showAddRow={false}
+            actions={[
+              {
+                label: 'View All Docs',
+                icon: <Eye className="w-4 h-4 text-blue-500" />,
+                onClick: (item) => {
+                  const docs = [];
+                  if (item.commercialInvoice?.document) docs.push(item.commercialInvoice.document);
+                  docs.push(...(item.freightInvoice?.uploadedDocuments || []));
+                  docs.push(...(item.pvoc?.uploadedDocuments || []));
+                  docs.push(...(item.coc?.uploadedDocuments || []));
+                  docs.push(...(item.packingList?.uploadedDocuments || []));
+                  docs.push(...(item.billOfLading?.uploadedDocuments || []));
+                  docs.push(...(item.travelDocuments?.uploadedDocuments || []));
+                  if (!docs.length) {
+                    showToast('No documents uploaded for this item', 'info');
+                    return;
+                  }
+                  openDocument(docs[0]);
+                }
+              }
+            ]}
+            themeColors={colors}
+          />
+
+          <button
+            onClick={() => {
+              if (allDocsUploaded) setOrderStatus('confirmed');
+              goToStepByKey('transport');
+              saveProgress();
+              showToast(
+                allDocsUploaded ? `All documents uploaded! Proceed to ${nextStepLabel}.` : `Continuing to ${nextStepLabel}. Remember to complete missing documents.`,
+                allDocsUploaded ? 'success' : 'info'
+              );
+            }}
+            className="mt-4 flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+            style={{ backgroundColor: allDocsUploaded ? colors.success : colors.primary }}
+          >
+            <CheckCircle className="w-4 h-4" />
+            Proceed to {nextStepLabel}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Transport: Send to Freight Forwarder / Book Local Transport
+  const renderTransportStep = () => {
+    const TransportIcon = isInternational ? Truck : Bus;
+    const stepTitle = isInternational ? 'Send to Freight Forwarder' : 'Book Local Transport Company';
+    const stepDescription = isInternational
+      ? 'Select a freight forwarder to send your goods and await their invoice.'
+      : 'Select a local transport company to deliver your goods.';
+
+    return (
+      <div className="space-y-6">
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <h3 className={`text-lg font-semibold mb-2 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <TransportIcon className="w-5 h-5" style={{ color: colors.primary }} />
+            {stepTitle}
+          </h3>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{stepDescription}</p>
+
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Select {transportLabel}</label>
+              <select
+                value={selectedFreightForwarder}
+                onChange={(e) => {
+                  setSelectedFreightForwarder(e.target.value);
+                  const selected = transportOptions.find((t) => t.id === e.target.value);
+                  if (selected) {
+                    setFreightForwarderName(selected.name);
+                    setFreightForwarderEmail(selected.email);
+                    setFreightData((prev) => ({
+                      ...prev,
+                      freightForwarder: selected.name,
+                      freightForwarderEmail: selected.email,
+                      freightForwarderPhone: selected.phone
+                    }));
+                  }
+                }}
+                className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+              >
+                <option value="">Select a {transportLabel.toLowerCase()}...</option>
+                {transportOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} - {t.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`} />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className={`px-2 ${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
+                  OR use your own {transportLabel.toLowerCase()}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>External {transportLabel}</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder={`${transportLabel} Name`}
+                  value={freightForwarderName}
+                  onChange={(e) => {
+                    setFreightForwarderName(e.target.value);
+                    setFreightData((prev) => ({ ...prev, freightForwarder: e.target.value }));
+                  }}
+                  className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                />
+                <input
+                  type="email"
+                  placeholder={`${transportLabel} Email`}
+                  value={freightForwarderEmail}
+                  onChange={(e) => {
+                    setFreightForwarderEmail(e.target.value);
+                    setFreightData((prev) => ({ ...prev, freightForwarderEmail: e.target.value }));
+                  }}
+                  className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                    isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {!isInternational ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Pickup Date</label>
+                  <input
+                    type="date"
+                    value={freightData.shippingDate}
+                    onChange={(e) => setFreightData((prev) => ({ ...prev, shippingDate: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Delivery Location</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Kampala, Uganda"
+                    value={freightData.portOfDischarge || ''}
+                    onChange={(e) => setFreightData((prev) => ({ ...prev, portOfDischarge: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Port of Loading</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Mombasa"
+                    value={freightData.portOfLoading}
+                    onChange={(e) => setFreightData((prev) => ({ ...prev, portOfLoading: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Expected Arrival</label>
+                  <input
+                    type="date"
+                    value={freightData.expectedArrival}
+                    onChange={(e) => setFreightData((prev) => ({ ...prev, expectedArrival: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-1 ${
+                      isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                  />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleSendToFreightForwarder}
+              disabled={!selectedFreightForwarder && !freightForwarderName}
+              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Send className="w-4 h-4" />
+              {isInternational ? 'Send Goods to Freight Forwarder' : 'Book Local Transport'}
+            </button>
+          </div>
+        </div>
+
+        {freightData.status !== 'pending' && (
+          <div
+            className={`p-6 rounded-lg border-2 ${
+              freightData.status === 'sent' || freightData.status === 'invoice_received'
+                ? isDark
+                  ? 'border-blue-700 bg-blue-900/20'
+                  : 'border-blue-500 bg-blue-50'
+                : freightData.status === 'accepted'
+                ? isDark
+                  ? 'border-green-700 bg-green-900/20'
+                  : 'border-green-500 bg-green-50'
+                : freightData.status === 'rejected'
+                ? isDark
+                  ? 'border-red-700 bg-red-900/20'
+                  : 'border-red-500 bg-red-50'
+                : isDark
+                ? 'border-yellow-700 bg-yellow-900/20'
+                : 'border-yellow-500 bg-yellow-50'
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              {(freightData.status === 'sent' || freightData.status === 'invoice_received') && <Clock className="w-8 h-8 text-blue-500" />}
+              {freightData.status === 'accepted' && <CheckCircle className="w-8 h-8 text-green-500" />}
+              {freightData.status === 'rejected' && <X className="w-8 h-8 text-red-500" />}
+              <div className="flex-1 min-w-[220px]">
+                <h4
+                  className={`font-semibold ${
+                    freightData.status === 'sent' || freightData.status === 'invoice_received'
+                      ? 'text-blue-700 dark:text-blue-400'
+                      : freightData.status === 'accepted'
+                      ? 'text-green-700 dark:text-green-400'
+                      : freightData.status === 'rejected'
+                      ? 'text-red-700 dark:text-red-400'
+                      : 'text-yellow-700 dark:text-yellow-400'
+                  }`}
+                >
+                  {freightData.status === 'sent'
+                    ? isInternational
+                      ? 'Goods Sent - Awaiting Freight Invoice'
+                      : 'Transport Booked - Awaiting Pickup'
+                    : freightData.status === 'invoice_received'
+                    ? 'Freight Invoice Received'
+                    : freightData.status.charAt(0).toUpperCase() + freightData.status.slice(1)}
+                </h4>
+                {freightData.freightForwarder && (
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {transportLabel}: {freightData.freightForwarder}
+                    {freightData.freightForwarderEmail ? ` (${freightData.freightForwarderEmail})` : ''}
+                  </p>
+                )}
+                {freightData.goodsSentAt && (
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Sent on: {new Date(freightData.goodsSentAt).toLocaleString()}
+                  </p>
+                )}
+                {freightResponse && (
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Response: {freightResponse.notes || 'No additional notes'}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  goToStepByKey('orderFinalisation');
+                  saveProgress();
+                }}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                style={{ backgroundColor: colors.primary }}
+              >
+                Continue to Order Finalisation
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Order Finalisation (shared)
+  const renderOrderFinalisationStep = () => {
+    const ready = allDocsUploaded && isTransportConfirmed;
+
+    const summaryRow = (label, value, ok) => (
+      <div className={`flex items-center justify-between gap-3 p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white border border-gray-200'}`}>
+        <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{label}</span>
+        <span className={`text-sm font-medium flex items-center gap-1 ${ok ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
+          {ok ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {value}
+        </span>
+      </div>
+    );
+
+    return (
+      <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+        <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          <CheckCircle className="w-5 h-5" style={{ color: colors.primary }} />
+          Order Finalisation
+        </h3>
+
+        <div
+          className={`p-4 rounded-lg mb-4 ${
+            ready
+              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+              : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {ready ? <CheckCircle className="w-6 h-6 text-green-500" /> : <AlertCircle className="w-6 h-6 text-yellow-500" />}
+            <div>
+              <p className={`font-medium ${ready ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
+                {ready ? 'Ready to finalize!' : 'Complete all steps before finalizing'}
+              </p>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                {ready
+                  ? 'All documents uploaded and transport confirmed. Finalize your export order.'
+                  : 'Please complete all previous steps and ensure transport has been arranged.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+          {summaryRow('Items', `${importData.items.length} item(s) • ${formatCurrency(getTotalItemsValue())}`, importData.items.length > 0)}
+          {summaryRow('Export type', isInternational ? 'International' : 'Local', true)}
+          {summaryRow('Required documents', allDocsUploaded ? 'Complete' : 'Missing documents', allDocsUploaded)}
+          {summaryRow(
+            isInternational ? 'Freight forwarder' : 'Local transport',
+            isTransportConfirmed ? freightData.freightForwarder || 'Booked' : 'Not arranged',
+            isTransportConfirmed
+          )}
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={!ready}
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
+          style={{ backgroundColor: ready ? colors.success : colors.primary }}
+        >
+          <CheckCircle className="w-4 h-4" />
+          Complete Export
+        </button>
+      </div>
+    );
+  };
+
+  // --------------------- step content dispatcher ---------------------
+  const renderStepContent = () => {
+    switch (activeStep?.key) {
+      case 'prepareGoods':
+        return renderPreparationStep();
+      case 'itemsReview':
+        return renderItemsReviewStep();
+      case 'loadOrder':
+        return renderLoadOrderStep();
+      case 'importerReview':
+        return renderImporterReviewStep();
+      case 'salesContract':
+        return renderSalesContractInvoiceStep();
+      case 'packingList':
+        return renderPackingListStep();
+      case 'billOfLading':
+        return renderBillOfLadingStep();
+      case 'finalisePreparation':
+        return renderFinalisePreparationStep();
+      case 'transport':
+        return renderTransportStep();
+      case 'orderFinalisation':
+        return renderOrderFinalisationStep();
+      default:
+        return renderPreparationStep();
+    }
+  };
+
+  // ------------------------- navigation handlers -------------------------
+  const handleNext = () => {
+    if (safeStepIndex < steps.length - 1) {
+      setCurrentStep(safeStepIndex + 1);
       saveProgress();
-      setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (currentStep > 0) {
-      // Prevent going back from certain steps
-      if (currentStep > 4 && isOrderConfirmed) {
-        showToast('Cannot go back after order is confirmed', 'error');
-        return;
-      }
-      setCurrentStep(currentStep - 1);
-    }
+    if (safeStepIndex > 0) setCurrentStep(safeStepIndex - 1);
   };
 
-  const handleSubmit = () => {
-    const hasValidItems = importData.items.some(item => 
-      item.itemName && item.quantity && item.totalValue
-    );
-    
-    if (!hasValidItems) {
-      showToast('Please add at least one valid item with name, quantity, and value', 'error');
-      setCurrentStep(1);
-      return;
-    }
+  // ProgressBar colours are generated from the real number of steps so the bar
+  // never runs out of colours when the step count changes with the mode.
+  const stepPalette = ['#714b67', '#8b5cf6', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#0ea5e9', '#14b8a6'];
+  const stepColors = steps.map((_, i) => stepPalette[i % stepPalette.length]);
 
-    const completedData = {
-      ...importData,
-      status: 'complete',
-      exportNumber: `EXP-${Date.now().toString().slice(-8)}`,
-      completedAt: new Date().toISOString(),
-      progress: 100,
-      salesContract,
-      freightData,
-      invoiceData
-    };
-    
-    const exportsList = JSON.parse(localStorage.getItem('allExports') || '[]');
-    exportsList.push(completedData);
-    localStorage.setItem('allExports', JSON.stringify(exportsList));
-    localStorage.removeItem('exportDraft');
-    
-    setImportData(completedData);
-    showToast(`Export ${completedData.exportNumber} completed successfully! 🎉`, 'success');
-    setTimeout(() => navigate('/my-exports'), 1500);
-  };
+  const modeBadge =
+    exportMode === 'importer'
+      ? { label: 'Importer Order', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' }
+      : { label: 'Self-Service', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
 
+  const typeBadge = isInternational
+    ? { label: 'International', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
+    : { label: 'Local', className: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' };
+
+  // ------------------------------ main view ------------------------------
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
-      {toast && <Toast message={toast.message} type={toast.type} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} themeColors={colors} />}
+
       {showDocumentViewer && viewingDocument && (
-        <DocumentViewerPage 
-          doc={viewingDocument} 
+        <DocumentViewerPage
+          isDark={isDark}
+          doc={viewingDocument}
           onClose={() => {
             setShowDocumentViewer(false);
             setViewingDocument(null);
-          }} 
+          }}
+          themeColors={colors}
         />
       )}
-      <RequestActionModal />
-      <FreightResponseModal />
-      {renderPVoCModal()}
-      {renderCoCModal()}
+
+      {renderLoadOrderModal()}
 
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -4529,25 +2901,22 @@ const NewExport = () => {
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </button>
-            <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              New Export Documentation
-            </h1>
-            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {importData.items.length} item(s) • {importData.exportNumber || 'Draft'} • Status: {getOrderStatusDisplay(orderStatus)}
-              {loadOrderMode && <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">Loaded Order</span>}
-              {isOrderConfirmed && <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Confirmed</span>}
-              {batchOrders.length > 0 && <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700">{batchOrders.length} Orders Loaded</span>}
+            <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Order Preperation</h1>
+            <p className={`text-sm flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <span>
+                {importData.items.length} item(s) • {importData.exportNumber || 'Draft'} • Status: {getOrderStatusDisplay(orderStatus)}
+              </span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${modeBadge.className}`}>{modeBadge.label}</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeBadge.className}`}>{typeBadge.label}</span>
             </p>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={saveProgress}
               disabled={isSaving}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md disabled:opacity-50"
-              style={{
-                backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg,
-                color: colors.primary
-              }}
+              style={{ backgroundColor: isDark ? colors.primaryBgDark : colors.primaryBg, color: colors.primary }}
             >
               {isSaving ? (
                 <>
@@ -4561,112 +2930,53 @@ const NewExport = () => {
                 </>
               )}
             </button>
-            {savedSuccess && (
-              <span className="text-sm text-green-500 animate-fade-in">✓ Saved!</span>
-            )}
+            {savedSuccess && <span className="text-sm text-green-500">✓ Saved!</span>}
           </div>
         </div>
 
-        {/* Progress Bar with Steps */}
         <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Overall Progress
-            </span>
-            <span className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {importData.progress}%
-            </span>
-          </div>
-          <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="absolute h-full rounded-full transition-all duration-500"
-              style={{ 
-                width: `${importData.progress}%`,
-                background: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryLight}, ${colors.success})`
-              }}
-            />
-          </div>
-          <div className="flex justify-between mt-1">
-            {steps.map((step, index) => {
-              const isActive = index === currentStep;
-              const isCompleted = index < currentStep;
-              return (
-                <button
-                  key={step.id}
-                  onClick={() => {
-                    // Prevent navigation to locked steps
-                    if (index > 3 && !isOrderConfirmed) {
-                      showToast('Please confirm the order first', 'error');
-                      return;
-                    }
-                    if (index > currentStep && !isOrderConfirmed && index > 3) {
-                      showToast('Please complete the current step first', 'error');
-                      return;
-                    }
-                    setCurrentStep(index);
-                    saveProgress();
-                  }}
-                  className={`flex flex-col items-center transition-all duration-200 ${
-                    isActive ? 'scale-110' : ''
-                  }`}
-                >
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-200 ${
-                    isActive 
-                      ? 'text-white shadow-lg' 
-                      : isCompleted 
-                      ? 'text-white' 
-                      : isDark ? 'text-gray-400 bg-gray-600' : 'text-gray-500 bg-gray-200'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? colors.primary : isCompleted ? colors.success : undefined
-                  }}>
-                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
-                  </div>
-                  <span className={`text-[10px] mt-1 text-center ${isActive ? 'font-bold' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {step.title}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <ProgressBar
+            steps={steps}
+            currentStep={safeStepIndex}
+            onStepClick={(step) => {
+              setCurrentStep(Math.min(Math.max(step, 0), steps.length - 1));
+              saveProgress();
+            }}
+            stepColors={stepColors}
+            theme={isDark ? 'dark' : 'light'}
+            size="sm"
+            showLabels
+            clickable
+          />
         </div>
 
-        <div className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${
-          isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
-        }`}>
-          <div className="flex items-center gap-2 mb-4">
-            {React.createElement(steps[currentStep].icon, {
-              className: "w-5 h-5",
-              style: { color: colors.primary }
-            })}
-            <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {steps[currentStep].title}
-            </h2>
+        <div className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'}`}>
+          {/* Title / description come from the SAME step object the dispatcher uses,
+              so the header can never describe a different step than the body. */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {activeStep?.icon && React.createElement(activeStep.icon, { className: 'w-5 h-5', style: { color: colors.primary } })}
+            <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{activeStep?.title}</h2>
             <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Step {currentStep + 1} of {steps.length}
+              Step {safeStepIndex + 1} of {steps.length}
             </span>
           </div>
-          <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            {steps[currentStep].description}
-          </p>
+          <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{activeStep?.description}</p>
 
-          {currentStep === 0 && renderOrderRequests()}
-          {currentStep === 1 && renderItemsReviewStep()}
-          {currentStep === 2 && renderSendToImporterStep()}
-          {currentStep === 3 && renderImporterConfirmationStep()}
-          {currentStep === 4 && renderSalesContractInvoiceStep()}
-          {currentStep === 5 && renderPackingBillOfLadingStep()}
-          {currentStep === 6 && renderSendToFreightForwarderStep()}
-          {currentStep === 7 && renderOrderFinalisationStep()}
+          {renderStepContent()}
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-6 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+          <div
+            className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-6 border-t"
+            style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}
+          >
             <button
               onClick={handlePrevious}
-              disabled={currentStep === 0}
+              disabled={safeStepIndex === 0}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                currentStep === 0
+                safeStepIndex === 0
                   ? 'opacity-50 cursor-not-allowed'
-                  : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
+                  : isDark
+                  ? 'text-gray-300 hover:bg-gray-700'
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <ChevronLeft className="w-4 h-4" />
@@ -4684,7 +2994,7 @@ const NewExport = () => {
                 Save Draft
               </button>
 
-              {currentStep === steps.length - 1 ? (
+              {safeStepIndex === steps.length - 1 ? (
                 <button
                   onClick={handleSubmit}
                   className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"

@@ -35,6 +35,13 @@ import {
   Info,
   ShoppingCart,
   ChevronDown as ChevronDownIcon,
+  PenSquare,
+  ArrowRightCircle,
+  PlayCircle,
+  FileEdit,
+  SquareArrowOutUpRight,
+  Forward,
+  Archive
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useNavigate } from 'react-router-dom';
@@ -148,7 +155,7 @@ const DUMMY_IMPORTS = [
 
 const MyImports = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const [imports, setImports] = useState([]);
   const [filteredImports, setFilteredImports] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,19 +164,18 @@ const MyImports = () => {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState(null);
-  // State to track which row's dropdown is open
   const [expandedRows, setExpandedRows] = useState({});
 
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
@@ -197,13 +203,11 @@ const MyImports = () => {
       
       let allImports = [...savedImports];
       
-      // If no imports exist, seed with dummy data
       if (allImports.length === 0) {
         allImports = DUMMY_IMPORTS;
         localStorage.setItem('allImports', JSON.stringify(allImports));
       }
       
-      // Add draft if it exists and is not in the list
       if (draft && !allImports.some(imp => imp.importNumber === draft.importNumber)) {
         allImports.unshift(draft);
       }
@@ -212,7 +216,6 @@ const MyImports = () => {
       setFilteredImports(allImports);
     } catch (e) {
       console.error('Error loading imports:', e);
-      // Fallback to dummy data
       setImports(DUMMY_IMPORTS);
       setFilteredImports(DUMMY_IMPORTS);
     } finally {
@@ -272,7 +275,6 @@ const MyImports = () => {
     }
   };
 
-  // Toggle dropdown for a specific row
   const toggleDropdown = (importNumber) => {
     setExpandedRows(prev => ({
       ...prev,
@@ -316,6 +318,7 @@ const MyImports = () => {
     }
   };
 
+  // ORIGINAL progress steps with dots and lines - KEEPING THIS DESIGN
   const getProgressSteps = (status) => {
     const steps = [
       { label: 'Preparation', completed: true },
@@ -372,6 +375,11 @@ const MyImports = () => {
     link.click();
     URL.revokeObjectURL(url);
     showToast('Export successful!', 'success');
+  };
+
+  // Navigate to import details when clicking the row
+  const handleRowClick = (imp) => {
+    navigate(`/import-details/${imp.importNumber || 'draft'}`, { state: { importData: imp } });
   };
 
   const Toast = ({ message, type }) => {
@@ -451,7 +459,6 @@ const MyImports = () => {
                   </td>
                 </tr>
               ))}
-              {/* Footer row with total */}
               <tr className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                 <td colSpan="2" className={`px-3 py-2 text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   Total
@@ -665,12 +672,14 @@ const MyImports = () => {
                     const itemCount = (imp.items || []).length;
                     const progress = imp.progress || 0;
                     const isExpanded = expandedRows[imp.importNumber] || false;
+                    const isComplete = status === 'complete' || status === 'finalized';
                     
                     return (
                       <React.Fragment key={imp.importNumber || imp.id || Math.random()}>
-                        {/* Main row */}
+                        {/* Main row - clickable to view details */}
                         <tr 
-                          className={`${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors ${isExpanded ? (isDark ? 'bg-gray-700' : 'bg-gray-50') : ''}`}
+                          className={`${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors cursor-pointer ${isExpanded ? (isDark ? 'bg-gray-700' : 'bg-gray-50') : ''}`}
+                          onClick={() => handleRowClick(imp)}
                         >
                           <td className="px-4 py-3">
                             <div className="font-medium">{imp.importNumber || 'Draft'}</div>
@@ -685,7 +694,10 @@ const MyImports = () => {
                           </td>
                           <td className="px-4 py-3">
                             <button
-                              onClick={() => toggleDropdown(imp.importNumber)}
+                              onClick={(e) => {
+                                e.stopPropagation(); // Prevent row click
+                                toggleDropdown(imp.importNumber);
+                              }}
                               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md ${
                                 isExpanded 
                                   ? 'text-white' 
@@ -706,6 +718,7 @@ const MyImports = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3">
+                            {/* ORIGINAL PROGRESS DESIGN WITH DOTS AND LINES */}
                             <div className="flex items-center gap-3">
                               <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
                                 <div 
@@ -737,31 +750,36 @@ const MyImports = () => {
                               {getStatusDisplay(status)}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1">
+                              {/* Continue button - only show if not complete */}
+                              {!isComplete && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleContinueImport(imp);
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                  title="Continue Import"
+                                >
+                                  <PenSquare className="w-4 h-4" style={{ color: colors.primary }} />
+                                </button>
+                              )}
                               <button
-                                onClick={() => navigate(`/import-details/${imp.importNumber || 'draft'}`, { state: { importData: imp } })}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4 text-blue-500" />
-                              </button>
-                              <button
-                                onClick={() => handleContinueImport(imp)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                                title="Continue"
-                              >
-                                <Edit2 className="w-4 h-4" style={{ color: colors.primary }} />
-                              </button>
-                              <button
-                                onClick={() => handleExportImport(imp)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExportImport(imp);
+                                }}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                                 title="Export"
                               >
                                 <Download className="w-4 h-4 text-gray-500" />
                               </button>
                               <button
-                                onClick={() => handleDeleteImport(imp.importNumber)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteImport(imp.importNumber);
+                                }}
                                 className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                 title="Delete"
                               >

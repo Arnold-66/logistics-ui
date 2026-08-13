@@ -108,7 +108,13 @@ import {
   Globe as GlobeIcon,
   Flag as FlagIcon,
   Container,
-  Ship as ShipIcon
+  Ship as ShipIcon,
+  Car,
+  Plane,
+  Train,
+  Plus,
+  Image,
+  Camera
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
@@ -116,7 +122,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const FreightForwarderDashboard = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -135,6 +141,48 @@ const FreightForwarderDashboard = () => {
   const [showNotifyModal, setShowNotifyModal] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState('');
   const [notifyRecipient, setNotifyRecipient] = useState('');
+
+  // New state for vessel management
+  const [showVesselModal, setShowVesselModal] = useState(false);
+  const [selectedVesselContainer, setSelectedVesselContainer] = useState(null);
+  const [vesselData, setVesselData] = useState({
+    name: '',
+    type: 'ship', // ship, plane, truck, train
+    image: null,
+    imagePreview: null,
+    voyage: '',
+    route: '',
+    scac: '',
+    flag: '',
+    capacity: '',
+    description: ''
+  });
+
+  // New state for status management
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedStatusContainer, setSelectedStatusContainer] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [customStatus, setCustomStatus] = useState('');
+  const [showCustomStatusInput, setShowCustomStatusInput] = useState(false);
+
+  // New state for booking creation
+  const [showNewBookingModal, setShowNewBookingModal] = useState(false);
+  const [newBookingType, setNewBookingType] = useState('new'); // 'new' or 'process'
+  const [newBookingData, setNewBookingData] = useState({
+    exporter: '',
+    consignee: '',
+    cargoDescription: '',
+    packages: '',
+    weight: '',
+    volume: '',
+    containerType: '20ft ST',
+    origin: '',
+    destination: '',
+    vesselName: '',
+    voyageNumber: '',
+    eta: '',
+    status: 'At Port'
+  });
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -170,18 +218,258 @@ const FreightForwarderDashboard = () => {
 
   // Color theme
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
+  // Flag SVG component using country ISO codes
+const getCountryCode = (countryName) => {
+  const codeMap = {
+    'Liberia': 'LR',
+    'India': 'IN',
+    'South Africa': 'ZA',
+    'Panama': 'PA',
+    'Germany': 'DE',
+    'Kenya': 'KE',
+    'Uganda': 'UG',
+    'United Kingdom': 'GB',
+    'USA': 'US',
+    'China': 'CN',
+    'Japan': 'JP',
+    'Singapore': 'SG',
+    'Malaysia': 'MY',
+    'Indonesia': 'ID',
+    'Thailand': 'TH',
+    'Vietnam': 'VN',
+    'Philippines': 'PH',
+    'Myanmar': 'MM',
+    'Cambodia': 'KH',
+    'Laos': 'LA',
+    'Brunei': 'BN',
+    'Timor-Leste': 'TL',
+    'Maldives': 'MV',
+    'Sri Lanka': 'LK',
+    'Bangladesh': 'BD',
+    'Pakistan': 'PK',
+    'Nepal': 'NP',
+    'Bhutan': 'BT',
+    'Mongolia': 'MN',
+    'North Korea': 'KP',
+    'South Korea': 'KR',
+    'Taiwan': 'TW',
+    'Hong Kong': 'HK',
+    'Macau': 'MO',
+    'Afghanistan': 'AF',
+    'Iran': 'IR',
+    'Iraq': 'IQ',
+    'Syria': 'SY',
+    'Lebanon': 'LB',
+    'Jordan': 'JO',
+    'Israel': 'IL',
+    'Palestine': 'PS',
+    'Saudi Arabia': 'SA',
+    'Yemen': 'YE',
+    'Oman': 'OM',
+    'UAE': 'AE',
+    'Qatar': 'QA',
+    'Bahrain': 'BH',
+    'Kuwait': 'KW',
+    'Egypt': 'EG',
+    'Libya': 'LY',
+    'Tunisia': 'TN',
+    'Algeria': 'DZ',
+    'Morocco': 'MA',
+    'Mauritania': 'MR',
+    'Senegal': 'SN',
+    'Gambia': 'GM',
+    'Mali': 'ML',
+    'Burkina Faso': 'BF',
+    'Niger': 'NE',
+    'Nigeria': 'NG',
+    'Cameroon': 'CM',
+    'Chad': 'TD',
+    'Sudan': 'SD',
+    'South Sudan': 'SS',
+    'Eritrea': 'ER',
+    'Djibouti': 'DJ',
+    'Somalia': 'SO',
+    'Ethiopia': 'ET',
+    'Rwanda': 'RW',
+    'Burundi': 'BI',
+    'Tanzania': 'TZ',
+    'Malawi': 'MW',
+    'Zambia': 'ZM',
+    'Zimbabwe': 'ZW',
+    'Mozambique': 'MZ',
+    'Angola': 'AO',
+    'Namibia': 'NA',
+    'Botswana': 'BW',
+    'Lesotho': 'LS',
+    'Eswatini': 'SZ',
+    'Madagascar': 'MG',
+    'Comoros': 'KM',
+    'Seychelles': 'SC',
+    'Mauritius': 'MU',
+    'France': 'FR',
+    'Spain': 'ES',
+    'Portugal': 'PT',
+    'Italy': 'IT',
+    'Greece': 'GR',
+    'Turkey': 'TR',
+    'Netherlands': 'NL',
+    'Belgium': 'BE',
+    'Luxembourg': 'LU',
+    'Switzerland': 'CH',
+    'Austria': 'AT',
+    'Czech Republic': 'CZ',
+    'Slovakia': 'SK',
+    'Hungary': 'HU',
+    'Slovenia': 'SI',
+    'Croatia': 'HR',
+    'Bosnia': 'BA',
+    'Serbia': 'RS',
+    'Montenegro': 'ME',
+    'Kosovo': 'XK',
+    'Albania': 'AL',
+    'Macedonia': 'MK',
+    'Romania': 'RO',
+    'Bulgaria': 'BG',
+    'Moldova': 'MD',
+    'Ukraine': 'UA',
+    'Belarus': 'BY',
+    'Russia': 'RU',
+    'Poland': 'PL',
+    'Lithuania': 'LT',
+    'Latvia': 'LV',
+    'Estonia': 'EE',
+    'Finland': 'FI',
+    'Sweden': 'SE',
+    'Norway': 'NO',
+    'Denmark': 'DK',
+    'Iceland': 'IS',
+    'Ireland': 'IE',
+    'Australia': 'AU',
+    'New Zealand': 'NZ',
+    'Papua New Guinea': 'PG',
+    'Fiji': 'FJ',
+    'Samoa': 'WS',
+    'Tonga': 'TO',
+    'Kiribati': 'KI',
+    'Marshall Islands': 'MH',
+    'Palau': 'PW',
+    'Nauru': 'NR',
+    'Tuvalu': 'TV',
+    'Vanuatu': 'VU',
+    'Solomon Islands': 'SB',
+    'Canada': 'CA',
+    'Mexico': 'MX',
+    'Brazil': 'BR',
+    'Argentina': 'AR',
+    'Uruguay': 'UY',
+    'Paraguay': 'PY',
+    'Bolivia': 'BO',
+    'Peru': 'PE',
+    'Ecuador': 'EC',
+    'Colombia': 'CO',
+    'Venezuela': 'VE',
+    'Guyana': 'GY',
+    'Suriname': 'SR',
+    'French Guiana': 'GF',
+    'Chile': 'CL',
+    'Costa Rica': 'CR',
+    'Nicaragua': 'NI',
+    'Honduras': 'HN',
+    'El Salvador': 'SV',
+    'Guatemala': 'GT',
+    'Belize': 'BZ',
+    'Cuba': 'CU',
+    'Jamaica': 'JM',
+    'Haiti': 'HT',
+    'Dominican Republic': 'DO',
+    'Puerto Rico': 'PR',
+    'Trinidad and Tobago': 'TT',
+    'Barbados': 'BB',
+    'Bahamas': 'BS',
+    'Antigua and Barbuda': 'AG',
+    'Dominica': 'DM',
+    'St Lucia': 'LC',
+    'St Vincent': 'VC',
+    'Grenada': 'GD',
+    'St Kitts and Nevis': 'KN'
+  };
+  
+  if (codeMap[countryName]) {
+    return codeMap[countryName];
+  }
+  
+  for (const [key, value] of Object.entries(codeMap)) {
+    if (countryName && countryName.toLowerCase().includes(key.toLowerCase())) {
+      return value;
+    }
+  }
+  
+  return null;
+};
+
+// Flag SVG component using country ISO codes (will work everywhere)
+const CountryFlag = ({ countryName, className = "w-5 h-5" }) => {
+  const countryCode = getCountryCode(countryName);
+  
+  if (!countryCode) {
+    return <Globe className={`${className} text-gray-400`} />;
+  }
+  
+  // Use flagcdn.com or similar service for reliable flag images
+  const flagUrl = `https://flagcdn.com/w40/${countryCode.toLowerCase()}.png`;
+  
+  return (
+    <img 
+      src={flagUrl} 
+      alt={`${countryName} flag`} 
+      className={`${className} rounded-sm object-cover`}
+      onError={(e) => {
+        // Fallback to emoji if image fails to load
+        e.target.style.display = 'none';
+        e.target.parentElement.innerHTML += `<span class="text-lg">${getCountryFlag(countryName)}</span>`;
+      }}
+    />
+  );
+};
+
+
   const isDark = darkMode;
+
+  // Predefined statuses
+  const statusOptions = [
+    'At Port',
+    'In Transit',
+    'Cleared',
+    'Delivered',
+    'Customs Hold',
+    'Documentation Pending',
+    'Awaiting Clearance',
+    'On Hold',
+    'Released',
+    'Inspection Required',
+    'Quarantined',
+    'Transit Delay',
+    'Port Congestion'
+  ];
+
+  // Vessel type options
+  const vesselTypes = [
+    { value: 'ship', icon: Ship, label: 'Ship' },
+    { value: 'plane', icon: Plane, label: 'Aircraft' },
+    { value: 'truck', icon: Truck, label: 'Truck' },
+    { value: 'train', icon: Train, label: 'Train' }
+  ];
 
   // Document data for containers
   const containerDocuments = {
@@ -216,6 +504,65 @@ const FreightForwarderDashboard = () => {
       { id: 'DOC-020', name: 'Certificate of Origin', type: 'pdf', status: 'pending', date: '2026-08-25', size: '1.3 MB' },
       { id: 'DOC-021', name: 'UNBS PVoC', type: 'pdf', status: 'pending', date: '2026-08-28', size: '3.5 MB' },
     ]
+  };
+
+  // Vessel data storage (mocked)
+  const vesselDataStorage = {
+    'FF-001': {
+      name: 'MV Star Express',
+      type: 'ship',
+      image: 'https://images.unsplash.com/photo-1544550581-8dfd1c3c9d3d?w=300&h=200&fit=crop',
+      voyage: '2026-08',
+      route: 'Shanghai → Mombasa',
+      scac: 'STAR',
+      flag: 'Liberia',
+      capacity: '8,500 TEU',
+      description: 'Modern container vessel with advanced navigation systems'
+    },
+    'FF-002': {
+      name: 'MV Indian Trader',
+      type: 'ship',
+      image: 'https://images.unsplash.com/photo-1544550581-8dfd1c3c9d3d?w=300&h=200&fit=crop',
+      voyage: '2026-07',
+      route: 'Mumbai → Mombasa',
+      scac: 'INDI',
+      flag: 'India',
+      capacity: '4,200 TEU',
+      description: 'Reliable container vessel serving East African routes'
+    },
+    'FF-003': {
+      name: 'MV African Trader',
+      type: 'ship',
+      image: 'https://images.unsplash.com/photo-1544550581-8dfd1c3c9d3d?w=300&h=200&fit=crop',
+      voyage: '2026-06',
+      route: 'Durban → Mombasa',
+      scac: 'AFTR',
+      flag: 'South Africa',
+      capacity: '3,800 TEU',
+      description: 'Regional container vessel for African trade routes'
+    },
+    'FF-004': {
+      name: 'MV Pacific Express',
+      type: 'ship',
+      image: 'https://images.unsplash.com/photo-1544550581-8dfd1c3c9d3d?w=300&h=200&fit=crop',
+      voyage: '2026-08',
+      route: 'Shanghai → Mombasa',
+      scac: 'PACI',
+      flag: 'Panama',
+      capacity: '6,500 TEU',
+      description: 'Long-haul container vessel for Pacific routes'
+    },
+    'FF-005': {
+      name: 'MV Europe Trader',
+      type: 'ship',
+      image: 'https://images.unsplash.com/photo-1544550581-8dfd1c3c9d3d?w=300&h=200&fit=crop',
+      voyage: '2026-07',
+      route: 'Hamburg → Mombasa',
+      scac: 'EURO',
+      flag: 'Germany',
+      capacity: '5,200 TEU',
+      description: 'European container vessel with advanced tracking systems'
+    }
   };
 
   // Alerts Data
@@ -277,7 +624,7 @@ const FreightForwarderDashboard = () => {
   ];
 
   // Enhanced Container Data for Freight Forwarder
-  const containersData = [
+  const [containersData, setContainersData] = useState([
     {
       id: 'FF-001',
       sealNo: 'SEAL-78923',
@@ -896,7 +1243,7 @@ const FreightForwarderDashboard = () => {
       originalShippingDate: '2026-08-25',
       originalPlaceOfDelivery: 'Kampala, Uganda'
     }
-  ];
+  ]);
 
   // Get unique exporters for filter
   const getUniqueExporters = () => {
@@ -923,6 +1270,15 @@ const FreightForwarderDashboard = () => {
       case 'At Port': return colors.warning;
       case 'In Transit': return colors.info;
       case 'Delivered': return colors.success;
+      case 'Customs Hold': return colors.danger;
+      case 'Documentation Pending': return colors.warning;
+      case 'Awaiting Clearance': return colors.info;
+      case 'On Hold': return colors.danger;
+      case 'Released': return colors.success;
+      case 'Inspection Required': return colors.warning;
+      case 'Quarantined': return colors.danger;
+      case 'Transit Delay': return colors.danger;
+      case 'Port Congestion': return colors.warning;
       default: return colors.info;
     }
   };
@@ -1110,9 +1466,9 @@ const FreightForwarderDashboard = () => {
   // Stats
   const containerStats = {
     total: containersData.length,
-    atPort: containersData.filter(c => c.status === 'At Port').length,
-    inTransit: containersData.filter(c => c.status === 'In Transit').length,
-    cleared: containersData.filter(c => c.status === 'Cleared').length,
+    atPort: containersData.filter(c => c.status === 'At Port' || c.status === 'Customs Hold' || c.status === 'Awaiting Clearance' || c.status === 'On Hold').length,
+    inTransit: containersData.filter(c => c.status === 'In Transit' || c.status === 'Transit Delay').length,
+    cleared: containersData.filter(c => c.status === 'Cleared' || c.status === 'Released').length,
     pending: containersData.filter(c => c.assignmentStatus === 'Pending').length,
     accepted: containersData.filter(c => c.assignmentStatus === 'Accepted').length,
     referred: containersData.filter(c => c.assignmentStatus === 'Refer').length
@@ -1165,6 +1521,7 @@ const FreightForwarderDashboard = () => {
       }
       return c;
     });
+    setContainersData(updatedContainers);
   };
 
   // Handle send freight invoice
@@ -1187,6 +1544,7 @@ const FreightForwarderDashboard = () => {
       }
       return c;
     });
+    setContainersData(updatedContainers);
   };
 
   // Handle notify exporter
@@ -1246,6 +1604,7 @@ const FreightForwarderDashboard = () => {
       }
       return c;
     });
+    setContainersData(updatedContainers);
     setEditBookingData(null);
   };
 
@@ -1333,121 +1692,402 @@ const FreightForwarderDashboard = () => {
     }
   };
 
-  // Render Print Modal
-  const PrintModal = () => {
-    if (!showPrintModal || !printContainer) return null;
+  // Handle vessel modal
+  const handleOpenVesselModal = (container) => {
+    setSelectedVesselContainer(container);
+    const existingVessel = vesselDataStorage[container.id];
+    if (existingVessel) {
+      setVesselData({
+        name: existingVessel.name || '',
+        type: existingVessel.type || 'ship',
+        image: existingVessel.image || null,
+        imagePreview: existingVessel.image || null,
+        voyage: existingVessel.voyage || '',
+        route: existingVessel.route || '',
+        scac: existingVessel.scac || '',
+        flag: existingVessel.flag || '',
+        capacity: existingVessel.capacity || '',
+        description: existingVessel.description || ''
+      });
+    } else {
+      setVesselData({
+        name: container.vesselName || '',
+        type: 'ship',
+        image: null,
+        imagePreview: null,
+        voyage: container.voyageNumber || '',
+        route: `${container.portOfLoading || ''} → ${container.portOfDischarge || ''}`,
+        scac: container.vesselSCAC || '',
+        flag: container.countryFlag || '',
+        capacity: '',
+        description: ''
+      });
+    }
+    setShowVesselModal(true);
+  };
 
-    const docs = containerDocuments[printContainer.id] || [];
+  const handleSaveVessel = () => {
+    console.log('Saving vessel data:', vesselData);
+    vesselDataStorage[selectedVesselContainer.id] = {
+      name: vesselData.name,
+      type: vesselData.type,
+      image: vesselData.imagePreview || vesselData.image,
+      voyage: vesselData.voyage,
+      route: vesselData.route,
+      scac: vesselData.scac,
+      flag: vesselData.flag,
+      capacity: vesselData.capacity,
+      description: vesselData.description
+    };
+    setShowVesselModal(false);
+    alert('Vessel information saved successfully!');
+  };
+
+  const handleVesselImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setVesselData({
+          ...vesselData,
+          image: file,
+          imagePreview: reader.result
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle status modal
+  const handleOpenStatusModal = (container) => {
+    setSelectedStatusContainer(container);
+    setSelectedStatus(container.status || '');
+    setCustomStatus('');
+    setShowCustomStatusInput(false);
+    setShowStatusModal(true);
+  };
+
+  const handleSaveStatus = () => {
+    const newStatus = showCustomStatusInput ? customStatus : selectedStatus;
+    if (!newStatus) {
+      alert('Please select or enter a status');
+      return;
+    }
+    
+    const updatedContainers = containersData.map(c => {
+      if (c.id === selectedStatusContainer.id) {
+        return { ...c, status: newStatus };
+      }
+      return c;
+    });
+    setContainersData(updatedContainers);
+    setShowStatusModal(false);
+    alert(`Status updated to: ${newStatus}`);
+  };
+
+  // Handle new booking
+  const handleNewBooking = (type) => {
+    setNewBookingType(type);
+    setNewBookingData({
+      exporter: '',
+      consignee: '',
+      cargoDescription: '',
+      packages: '',
+      weight: '',
+      volume: '',
+      containerType: '20ft ST',
+      origin: '',
+      destination: '',
+      vesselName: '',
+      voyageNumber: '',
+      eta: '',
+      status: 'At Port'
+    });
+    setShowNewBookingModal(true);
+  };
+
+  const handleSaveNewBooking = () => {
+    // Validate required fields
+    if (!newBookingData.exporter || !newBookingData.cargoDescription || !newBookingData.origin || !newBookingData.destination) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    const newId = `FF-${String(containersData.length + 1).padStart(3, '0')}`;
+    const newContainer = {
+      id: newId,
+      sealNo: `SEAL-${Math.floor(Math.random() * 100000)}`,
+      serviceName: newBookingData.vesselName || 'Not Assigned',
+      size: newBookingData.containerType,
+      packages: parseInt(newBookingData.packages) || 0,
+      grossWeight: newBookingData.weight || '0 kg',
+      volume: newBookingData.volume || '0 m³',
+      measurement: 'N/A',
+      cargoDescription: newBookingData.cargoDescription,
+      exporter: newBookingData.exporter,
+      consignee: {
+        name: newBookingData.consignee || newBookingData.exporter,
+        contact: 'N/A',
+        email: 'N/A',
+        address: 'N/A'
+      },
+      status: newBookingData.status || 'At Port',
+      location: newBookingData.origin || 'N/A',
+      voyage: newBookingData.vesselName || 'Not Assigned',
+      eta: newBookingData.eta || 'TBD',
+      daysAtSea: 0,
+      assignedAgent: null,
+      assignedTransporter: null,
+      agentProgress: 0,
+      agentStatus: 'Not Started',
+      assignmentDate: new Date().toISOString().split('T')[0],
+      assignmentStatus: 'Pending',
+      clearanceStatus: 'Not Started',
+      daysInPort: 0,
+      transitStatus: 'At Port',
+      expectedArrivalDate: newBookingData.eta || 'TBD',
+      shipDetails: newBookingData.vesselName ? `${newBookingData.vesselName} | Voyage: ${newBookingData.voyageNumber || 'N/A'}` : 'Not Assigned',
+      transporterReady: false,
+      paymentStatus: 'Pending',
+      transporterProgress: 0,
+      transporterStatus: 'Not Assigned',
+      transporterLocation: null,
+      transporterETA: null,
+      declaredCargoValue: 'TBD',
+      shippingDate: new Date().toISOString().split('T')[0],
+      placeOfFinalDelivery: newBookingData.destination,
+      preCarriageBy: 'Truck',
+      placeOfReceipt: newBookingData.origin,
+      vesselName: newBookingData.vesselName || 'N/A',
+      vesselSCAC: 'N/A',
+      voyageNumber: newBookingData.voyageNumber || 'N/A',
+      countryFlag: 'N/A',
+      portOfLoading: newBookingData.origin,
+      loadingPierTerminal: 'N/A',
+      originalsToBeReleasedAt: 'N/A',
+      portOfDischarge: newBookingData.destination,
+      typeOfMovement: 'Door to Door',
+      packingLists: [],
+      milestones: [
+        { stage: 'Booking Created', date: new Date().toISOString().split('T')[0], completed: true },
+        { stage: 'Awaiting Assignment', date: new Date().toISOString().split('T')[0], completed: false },
+        { stage: 'In Transit', date: 'TBD', completed: false },
+        { stage: 'Arrived at Destination', date: 'TBD', completed: false },
+        { stage: 'Delivery', date: 'TBD', completed: false }
+      ],
+      trackingHistory: [
+        { date: new Date().toISOString().split('T')[0] + ' 00:00', location: newBookingData.origin || 'N/A', status: 'Booking Created' }
+      ],
+      expectedDeparture: new Date().toISOString().split('T')[0],
+      expectedArrival: newBookingData.eta || 'TBD',
+      delayed: false,
+      delayReason: null,
+      actionRequired: 'Awaiting Assignment',
+      daysInTransit: 0,
+      originalETA: newBookingData.eta || 'TBD',
+      originalShippingDate: new Date().toISOString().split('T')[0],
+      originalPlaceOfDelivery: newBookingData.destination
+    };
+
+    setContainersData([...containersData, newContainer]);
+    setShowNewBookingModal(false);
+    alert(`New booking ${newId} created successfully!`);
+  };
+
+  // Render Vessel Modal
+  const VesselModal = () => {
+    if (!showVesselModal || !selectedVesselContainer) return null;
+
+    const VesselTypeIcon = vesselTypes.find(v => v.value === vesselData.type)?.icon || Ship;
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-           onClick={() => setShowPrintModal(false)}>
+           onClick={() => setShowVesselModal(false)}>
         <div
-          className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          className="w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800 max-h-[90vh]"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+            style={{ backgroundColor: colors.primary + '10' }}>
             <div className="flex items-center gap-3">
-              <Printer className="w-5 h-5" style={{ color: colors.primary }} />
-              <h3 className="font-bold text-gray-900 dark:text-white">
-                Print Options - {printContainer.id}
+              <Ship className="w-5 h-5" style={{ color: colors.primary }} />
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Vessel Details - {selectedVesselContainer.id}
               </h3>
             </div>
             <button
-              onClick={() => setShowPrintModal(false)}
+              onClick={() => setShowVesselModal(false)}
               className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-4 max-h-96 overflow-y-auto">
+          <div className="p-4 overflow-y-auto max-h-[70vh]">
             <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                  Packing Lists
-                </h4>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={printOptions.allPackingLists}
-                      onChange={(e) => {
-                        setPrintOptions({
-                          ...printOptions,
-                          allPackingLists: e.target.checked,
-                          packingLists: e.target.checked
-                        });
-                      }}
-                      className="rounded"
+              {/* Vessel Image Upload */}
+              <div className={`p-4 rounded-lg border-2 border-dashed text-center ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                {vesselData.imagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={vesselData.imagePreview} 
+                      alt="Vessel" 
+                      className="w-full h-48 object-cover rounded-lg"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      All Packing Lists
-                    </span>
-                  </label>
-                  {printContainer.packingLists.map((pl) => (
-                    <label key={pl.id} className="flex items-center gap-2 cursor-pointer ml-6">
-                      <input
-                        type="checkbox"
-                        checked={printOptions.selectedPackingList === pl.id}
-                        onChange={(e) => {
-                          setPrintOptions({
-                            ...printOptions,
-                            selectedPackingList: e.target.checked ? pl.id : null,
-                            packingLists: e.target.checked
-                          });
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {pl.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => setVesselData({...vesselData, imagePreview: null, image: null})}
+                      className="absolute top-2 right-2 p-1 rounded-full bg-red-500 text-white hover:bg-red-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="py-8">
+                    <Camera className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Click to upload vessel image
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleVesselImageUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="border-t pt-4 border-gray-200 dark:border-gray-700">
-                <h4 className="text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                  Documents
-                </h4>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={printOptions.allDocuments}
-                      onChange={(e) => {
-                        setPrintOptions({
-                          ...printOptions,
-                          allDocuments: e.target.checked,
-                          documents: e.target.checked
-                        });
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      All Documents
-                    </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Vessel Name *
                   </label>
-                  {docs.map((doc) => (
-                    <label key={doc.id} className="flex items-center gap-2 cursor-pointer ml-6">
-                      <input
-                        type="checkbox"
-                        checked={printOptions.selectedDocument === doc.id}
-                        onChange={(e) => {
-                          setPrintOptions({
-                            ...printOptions,
-                            selectedDocument: e.target.checked ? doc.id : null,
-                            documents: e.target.checked
-                          });
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {doc.name}
-                      </span>
-                    </label>
-                  ))}
+                  <input
+                    type="text"
+                    value={vesselData.name}
+                    onChange={(e) => setVesselData({...vesselData, name: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., MV Star Express"
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Vessel Type *
+                  </label>
+                  <select
+                    value={vesselData.type}
+                    onChange={(e) => setVesselData({...vesselData, type: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                  >
+                    {vesselTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Voyage Number
+                  </label>
+                  <input
+                    type="text"
+                    value={vesselData.voyage}
+                    onChange={(e) => setVesselData({...vesselData, voyage: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., 2026-08"
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Route
+                  </label>
+                  <input
+                    type="text"
+                    value={vesselData.route}
+                    onChange={(e) => setVesselData({...vesselData, route: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., Shanghai → Mombasa"
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    SCAC Code
+                  </label>
+                  <input
+                    type="text"
+                    value={vesselData.scac}
+                    onChange={(e) => setVesselData({...vesselData, scac: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., STAR"
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Flag
+                  </label>
+                  <input
+                    type="text"
+                    value={vesselData.flag}
+                    onChange={(e) => setVesselData({...vesselData, flag: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., Liberia"
+                  />
+                </div>
+
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Capacity
+                  </label>
+                  <input
+                    type="text"
+                    value={vesselData.capacity}
+                    onChange={(e) => setVesselData({...vesselData, capacity: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="e.g., 8,500 TEU"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Description
+                  </label>
+                  <textarea
+                    value={vesselData.description}
+                    onChange={(e) => setVesselData({...vesselData, description: e.target.value})}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    rows="3"
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="Enter vessel description..."
+                  />
                 </div>
               </div>
             </div>
@@ -1455,18 +2095,388 @@ const FreightForwarderDashboard = () => {
 
           <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
             <button
-              onClick={() => setShowPrintModal(false)}
-              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              onClick={() => setShowVesselModal(false)}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
               Cancel
             </button>
             <button
-              onClick={executePrint}
-              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+              onClick={handleSaveVessel}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
               style={{ backgroundColor: colors.primary }}
             >
-              <Printer className="w-4 h-4 inline mr-2" />
-              Print
+              <Save className="w-4 h-4" />
+              Save Vessel Details
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render Status Modal
+  const StatusModal = () => {
+    if (!showStatusModal || !selectedStatusContainer) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+           onClick={() => setShowStatusModal(false)}>
+        <div
+          className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+            style={{ backgroundColor: colors.info + '10' }}>
+            <div className="flex items-center gap-3">
+              <Flag className="w-5 h-5" style={{ color: colors.info }} />
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Update Status - {selectedStatusContainer.id}
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowStatusModal(false)}
+              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              Current Status: <span className="font-medium">{selectedStatusContainer.status}</span>
+            </p>
+            
+            <div className="mb-4">
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Select Status
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setShowCustomStatusInput(false);
+                }}
+                className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+              >
+                <option value="">Select a status...</option>
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+                <option value="custom">+ Add Custom Status</option>
+              </select>
+            </div>
+
+            {showCustomStatusInput && (
+              <div className="mb-4">
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Custom Status
+                </label>
+                <input
+                  type="text"
+                  value={customStatus}
+                  onChange={(e) => setCustomStatus(e.target.value)}
+                  placeholder="Enter custom status..."
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                />
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveStatus}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
+                style={{ backgroundColor: colors.info }}
+              >
+                <Save className="w-4 h-4" />
+                Update Status
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render New Booking Modal
+  const NewBookingModal = () => {
+    if (!showNewBookingModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+           onClick={() => setShowNewBookingModal(false)}>
+        <div
+          className="w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800 max-h-[90vh]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+            style={{ backgroundColor: colors.primary + '10' }}>
+            <div className="flex items-center gap-3">
+              {newBookingType === 'new' ? (
+                <Plus className="w-5 h-5" style={{ color: colors.primary }} />
+              ) : (
+                <RefreshCw className="w-5 h-5" style={{ color: colors.primary }} />
+              )}
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {newBookingType === 'new' ? 'New Booking' : 'Process Booking'}
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowNewBookingModal(false)}
+              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4 overflow-y-auto max-h-[70vh]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Exporter / Client *
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.exporter}
+                  onChange={(e) => setNewBookingData({...newBookingData, exporter: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="Enter exporter name"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Consignee
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.consignee}
+                  onChange={(e) => setNewBookingData({...newBookingData, consignee: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="Enter consignee name"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Cargo Description *
+                </label>
+                <textarea
+                  value={newBookingData.cargoDescription}
+                  onChange={(e) => setNewBookingData({...newBookingData, cargoDescription: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  rows="2"
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="Describe the cargo..."
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Number of Packages
+                </label>
+                <input
+                  type="number"
+                  value={newBookingData.packages}
+                  onChange={(e) => setNewBookingData({...newBookingData, packages: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., 10"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Container Type
+                </label>
+                <select
+                  value={newBookingData.containerType}
+                  onChange={(e) => setNewBookingData({...newBookingData, containerType: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                >
+                  <option value="20ft ST">20ft ST</option>
+                  <option value="40ft HC">40ft HC</option>
+                  <option value="40ft ST">40ft ST</option>
+                  <option value="20ft HC">20ft HC</option>
+                  <option value="45ft HC">45ft HC</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Weight
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.weight}
+                  onChange={(e) => setNewBookingData({...newBookingData, weight: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., 5,000 kg"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Volume
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.volume}
+                  onChange={(e) => setNewBookingData({...newBookingData, volume: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., 33.2 m³"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Origin *
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.origin}
+                  onChange={(e) => setNewBookingData({...newBookingData, origin: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., Shanghai, China"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Destination *
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.destination}
+                  onChange={(e) => setNewBookingData({...newBookingData, destination: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., Mombasa, Kenya"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Vessel Name
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.vesselName}
+                  onChange={(e) => setNewBookingData({...newBookingData, vesselName: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., MV Star Express"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Voyage Number
+                </label>
+                <input
+                  type="text"
+                  value={newBookingData.voyageNumber}
+                  onChange={(e) => setNewBookingData({...newBookingData, voyageNumber: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                  placeholder="e.g., 2026-08"
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  ETA
+                </label>
+                <input
+                  type="date"
+                  value={newBookingData.eta}
+                  onChange={(e) => setNewBookingData({...newBookingData, eta: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                />
+              </div>
+
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Initial Status
+                </label>
+                <select
+                  value={newBookingData.status}
+                  onChange={(e) => setNewBookingData({...newBookingData, status: e.target.value})}
+                  className={`w-full mt-1 px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
+                    isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                  style={{ focusRingColor: colors.primary }}
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+            <button
+              onClick={() => setShowNewBookingModal(false)}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveNewBooking}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Save className="w-4 h-4" />
+              {newBookingType === 'new' ? 'Create Booking' : 'Process Booking'}
             </button>
           </div>
         </div>
@@ -2013,6 +3023,149 @@ const FreightForwarderDashboard = () => {
     );
   };
 
+  // Render Print Modal
+  const PrintModal = () => {
+    if (!showPrintModal || !printContainer) return null;
+
+    const docs = containerDocuments[printContainer.id] || [];
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+           onClick={() => setShowPrintModal(false)}>
+        <div
+          className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Printer className="w-5 h-5" style={{ color: colors.primary }} />
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Print Options - {printContainer.id}
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowPrintModal(false)}
+              className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4 max-h-96 overflow-y-auto">
+            <div className="space-y-4">
+              <div>
+                <h4 className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Packing Lists
+                </h4>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printOptions.allPackingLists}
+                      onChange={(e) => {
+                        setPrintOptions({
+                          ...printOptions,
+                          allPackingLists: e.target.checked,
+                          packingLists: e.target.checked
+                        });
+                      }}
+                      className="rounded"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      All Packing Lists
+                    </span>
+                  </label>
+                  {printContainer.packingLists.map((pl) => (
+                    <label key={pl.id} className="flex items-center gap-2 cursor-pointer ml-6">
+                      <input
+                        type="checkbox"
+                        checked={printOptions.selectedPackingList === pl.id}
+                        onChange={(e) => {
+                          setPrintOptions({
+                            ...printOptions,
+                            selectedPackingList: e.target.checked ? pl.id : null,
+                            packingLists: e.target.checked
+                          });
+                        }}
+                        className="rounded"
+                      />
+                      <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {pl.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t pt-4" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                <h4 className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Documents
+                </h4>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={printOptions.allDocuments}
+                      onChange={(e) => {
+                        setPrintOptions({
+                          ...printOptions,
+                          allDocuments: e.target.checked,
+                          documents: e.target.checked
+                        });
+                      }}
+                      className="rounded"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                      All Documents
+                    </span>
+                  </label>
+                  {docs.map((doc) => (
+                    <label key={doc.id} className="flex items-center gap-2 cursor-pointer ml-6">
+                      <input
+                        type="checkbox"
+                        checked={printOptions.selectedDocument === doc.id}
+                        onChange={(e) => {
+                          setPrintOptions({
+                            ...printOptions,
+                            selectedDocument: e.target.checked ? doc.id : null,
+                            documents: e.target.checked
+                          });
+                        }}
+                        className="rounded"
+                      />
+                      <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {doc.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+            <button
+              onClick={() => setShowPrintModal(false)}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={executePrint}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Printer className="w-4 h-4 inline mr-2" />
+              Print
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render documents tab content
   const renderDocumentsTab = (container) => {
     const docs = containerDocuments[container.id] || [];
@@ -2145,642 +3298,752 @@ const FreightForwarderDashboard = () => {
   };
 
   // Render expanded container details
-  const renderExpandedContainer = (container) => {
-    const isExpanded = expandedContainerId === container.id;
-    if (!isExpanded) return null;
+  // Render expanded container details
+const renderExpandedContainer = (container) => {
+  const isExpanded = expandedContainerId === container.id;
+  if (!isExpanded) return null;
 
-    const tabs = [
-      { id: 'info', label: 'Container Info', icon: Info },
-      { id: 'booking', label: 'Booking Details', icon: ClipboardList },
-      { id: 'packing', label: 'Packing List', icon: Package },
-      { id: 'documents', label: 'Documents', icon: FileText },
-      { id: 'tracking', label: 'Tracking', icon: Map }
-    ];
+  const tabs = [
+    { id: 'info', label: 'Container Info', icon: Info },
+    { id: 'booking', label: 'Booking Details', icon: ClipboardList },
+    { id: 'packing', label: 'Packing List', icon: Package },
+    { id: 'documents', label: 'Documents', icon: FileText },
+    { id: 'tracking', label: 'Tracking', icon: Map }
+  ];
 
-    const transitInfo = getTransitStatusDisplay(container);
+  const transitInfo = getTransitStatusDisplay(container);
+  const vesselInfo = vesselDataStorage[container.id];
 
-    return (
-      <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <td colSpan="9" className="p-0">
-          <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
-            {/* Status Banner */}
-            <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2`}
-              style={{ backgroundColor: `${transitInfo.color}20`, borderColor: transitInfo.color, borderLeft: `4px solid ${transitInfo.color}` }}>
-              <div className="flex items-center gap-3">
-                <span style={{ color: transitInfo.color }}>
-                  {transitInfo.icon}
-                </span>
-                <div>
-                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    {transitInfo.label}
+  return (
+    <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+      <td colSpan="9" className="p-0">
+        <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
+          {/* Status Banner */}
+          <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2`}
+            style={{ backgroundColor: `${transitInfo.color}20`, borderColor: transitInfo.color, borderLeft: `4px solid ${transitInfo.color}` }}>
+            <div className="flex items-center gap-3">
+              <span style={{ color: transitInfo.color }}>
+                {transitInfo.icon}
+              </span>
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {transitInfo.label}
+                </p>
+                {container.delayed && (
+                  <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                    Delay Reason: {container.delayReason}
                   </p>
-                  {container.delayed && (
-                    <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                      Delay Reason: {container.delayReason}
-                    </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => handleOpenStatusModal(container)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 hover:opacity-80 flex items-center gap-1`}
+                style={{
+                  backgroundColor: getStatusColor(container.status) + '20',
+                  color: getStatusColor(container.status)
+                }}
+              >
+                <Flag className="w-3 h-3" />
+                {container.status}
+                <Edit className="w-3 h-3 ml-1" />
+              </button>
+              <button
+                onClick={() => handleOpenVesselModal(container)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all duration-200 hover:opacity-80 flex items-center gap-1`}
+                style={{
+                  backgroundColor: colors.primary + '20',
+                  color: colors.primary
+                }}
+              >
+                <Ship className="w-3 h-3" />
+                Vessel
+                <Edit className="w-3 h-3 ml-1" />
+              </button>
+              <span className={`text-xs px-2 py-1 rounded-full`} style={{
+                backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
+                color: getAssignmentStatusColor(container.assignmentStatus)
+              }}>
+                {container.assignmentStatus}
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                Action: {container.actionRequired}
+              </span>
+            </div>
+          </div>
+
+          {/* Vessel Info Card - New Section */}
+          {vesselInfo && (
+            <div className={`mb-4 p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {vesselInfo.type === 'ship' && <Ship className="w-5 h-5" style={{ color: colors.primary }} />}
+                  {vesselInfo.type === 'plane' && <Plane className="w-5 h-5" style={{ color: colors.primary }} />}
+                  {vesselInfo.type === 'truck' && <Truck className="w-5 h-5" style={{ color: colors.primary }} />}
+                  {vesselInfo.type === 'train' && <Train className="w-5 h-5" style={{ color: colors.primary }} />}
+                  <h4 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {vesselInfo.name || 'Vessel Information'}
+                  </h4>
+                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize`}
+                    style={{
+                      backgroundColor: colors.primary + '20',
+                      color: colors.primary
+                    }}>
+                    {vesselInfo.type}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleOpenVesselModal(container)}
+                  className="px-2 py-1 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Edit className="w-3 h-3" />
+                  Edit
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                {vesselInfo.image && (
+                  <div className="w-32 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                    <img src={vesselInfo.image} alt="Vessel" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Voyage</p>
+                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{vesselInfo.voyage || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Route</p>
+                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{vesselInfo.route || 'N/A'}</p>
+                  </div>
+                  <div>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Flag</p>
+                  <div className="flex items-center gap-2">
+                    <CountryFlag countryName={vesselInfo.flag} className="w-6 h-4" />
+                    <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {vesselInfo.flag || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+                  {vesselInfo.capacity && (
+                    <div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacity</p>
+                      <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{vesselInfo.capacity}</p>
+                    </div>
+                  )}
+                  {vesselInfo.description && (
+                    <div className="col-span-2">
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Description</p>
+                      <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{vesselInfo.description}</p>
+                    </div>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-1 rounded-full`} style={{
-                  backgroundColor: getStatusColor(container.status) + '20',
-                  color: getStatusColor(container.status)
-                }}>
-                  {container.status}
-                </span>
-                <span className={`text-xs px-2 py-1 rounded-full`} style={{
-                  backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
-                  color: getAssignmentStatusColor(container.assignmentStatus)
-                }}>
-                  {container.assignmentStatus}
-                </span>
-                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Action: {container.actionRequired}
-                </span>
-              </div>
             </div>
+          )}
 
-            {/* Quick Action Buttons */}
-            {container.assignmentStatus === 'Pending' && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleAssignmentAction(container, 'accept')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.success }}
-                >
-                  <Check className="w-3 h-3" />
-                  Accept Booking
-                </button>
-                <button
-                  onClick={() => handleAssignmentAction(container, 'reject')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.danger }}
-                >
-                  <X className="w-3 h-3" />
-                  Reject Booking
-                </button>
-                <button
-                  onClick={() => handleAssignmentAction(container, 'refer')}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.info }}
-                >
-                  <AlertCircle className="w-3 h-3" />
-                  Refer Booking
-                </button>
-              </div>
-            )}
-
-            {container.assignmentStatus === 'Accepted' && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleEditBooking(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <PenSquare className="w-3 h-3" />
-                  Edit Booking
-                </button>
-                <button
-                  onClick={() => handleSendBill(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.success }}
-                >
-                  <DollarIcon className="w-3 h-3" />
-                  Send Freight Invoice
-                </button>
-                <button
-                  onClick={() => handleNotifyExporter(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.info }}
-                >
-                  <Mail className="w-3 h-3" />
-                  Notify Exporter
-                </button>
-                <button
-                  onClick={() => handlePrint(container)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Printer className="w-3 h-3" />
-                  Print Documents
-                </button>
-              </div>
-            )}
-
-            {/* Tabs */}
-            <div className={`flex border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-x-auto mb-4`}>
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setExpandedContainerTab(tab.id)}
-                  className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2 ${
-                    expandedContainerTab === tab.id
-                      ? 'border-b-2'
-                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                  style={{
-                    borderColor: expandedContainerTab === tab.id ? colors.primary : 'transparent',
-                    color: expandedContainerTab === tab.id ? colors.primary : undefined
-                  }}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
+          {/* Quick Action Buttons */}
+          {container.assignmentStatus === 'Pending' && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => handleAssignmentAction(container, 'accept')}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.success }}
+              >
+                <Check className="w-3 h-3" />
+                Accept Booking
+              </button>
+              <button
+                onClick={() => handleAssignmentAction(container, 'reject')}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.danger }}
+              >
+                <X className="w-3 h-3" />
+                Reject Booking
+              </button>
+              <button
+                onClick={() => handleAssignmentAction(container, 'refer')}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.info }}
+              >
+                <AlertCircle className="w-3 h-3" />
+                Refer Booking
+              </button>
             </div>
+          )}
 
-            {/* Tab Content */}
-            <div className="space-y-4">
-              {expandedContainerTab === 'info' && (
-                <div className="space-y-4">
-                  {/* Container Info Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Container No.</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.id}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal No.</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNo}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Service Name</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.voyage}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.size}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Packages</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.packages}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gross Weight</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.grossWeight}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.volume}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Measurement</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.measurement}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
-                        style={{
-                          backgroundColor: getStatusColor(container.status) + '20',
-                          color: getStatusColor(container.status)
-                        }}>
-                        {container.status === 'Cleared' && <CheckCircle className="w-3 h-3" />}
-                        {container.status === 'At Port' && <Anchor className="w-3 h-3" />}
-                        {container.status === 'In Transit' && <Ship className="w-3 h-3" />}
-                        {container.status}
-                      </span>
-                    </div>
+          {container.assignmentStatus === 'Accepted' && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => handleEditBooking(container)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <PenSquare className="w-3 h-3" />
+                Edit Booking
+              </button>
+              <button
+                onClick={() => handleSendBill(container)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.success }}
+              >
+                <DollarIcon className="w-3 h-3" />
+                Send Freight Invoice
+              </button>
+              <button
+                onClick={() => handleNotifyExporter(container)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.info }}
+              >
+                <Mail className="w-3 h-3" />
+                Notify Exporter
+              </button>
+              <button
+                onClick={() => handlePrint(container)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Printer className="w-3 h-3" />
+                Print Documents
+              </button>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className={`flex border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} overflow-x-auto mb-4`}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setExpandedContainerTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-2 ${
+                  expandedContainerTab === tab.id
+                    ? 'border-b-2'
+                    : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                style={{
+                  borderColor: expandedContainerTab === tab.id ? colors.primary : 'transparent',
+                  color: expandedContainerTab === tab.id ? colors.primary : undefined
+                }}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="space-y-4">
+            {expandedContainerTab === 'info' && (
+              <div className="space-y-4">
+                {/* Container Info Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Container No.</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.id}</p>
                   </div>
-
-                  {/* Assignment & Clearance Info */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Assignment Date</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.assignmentDate || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Clearance Status</p>
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
-                        style={{
-                          backgroundColor: getClearanceStatusColor(container.clearanceStatus) + '20',
-                          color: getClearanceStatusColor(container.clearanceStatus)
-                        }}>
-                        {container.clearanceStatus}
-                      </span>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Payment Status</p>
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
-                        style={{
-                          backgroundColor: container.paymentStatus === 'Paid' ? colors.success + '20' : colors.warning + '20',
-                          color: container.paymentStatus === 'Paid' ? colors.success : colors.warning
-                        }}>
-                        {container.paymentStatus}
-                      </span>
-                    </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal No.</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNo}</p>
                   </div>
-
-                  {/* Ship Details & Expected Arrival */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Ship Details</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.shipDetails || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expected Arrival</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.expectedArrivalDate || container.eta || 'N/A'}
-                      </p>
-                    </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Service Name</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.voyage}</p>
                   </div>
-
-                  {/* Transporter Info */}
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                    <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      <Truck className="w-4 h-4" style={{ color: colors.primary }} />
-                      Assigned Inland Transporter
-                    </h4>
-                    {container.assignedTransporter ? (
-                      <div className="space-y-2">
-                        <div>
-                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {container.assignedTransporter.name}
-                          </p>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.assignedTransporter.email}
-                          </p>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.assignedTransporter.contact}
-                          </p>
-                        </div>
-                        {container.transporterProgress !== null && (
-                          <div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                                Transport Progress: {container.transporterProgress}%
-                              </span>
-                              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                {container.transporterStatus}
-                              </span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{
-                                  width: `${container.transporterProgress}%`,
-                                  backgroundColor: getAgentProgressColor(container.transporterProgress)
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        No transporter assigned
-                      </p>
-                    )}
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Size</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.size}</p>
                   </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Packages</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.packages}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gross Weight</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.grossWeight}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.volume}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Measurement</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.measurement}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
+                    <button
+                      onClick={() => handleOpenStatusModal(container)}
+                      className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1 transition-all duration-200 hover:opacity-80`}
+                      style={{
+                        backgroundColor: getStatusColor(container.status) + '20',
+                        color: getStatusColor(container.status)
+                      }}
+                    >
+                      {container.status === 'Cleared' && <CheckCircle className="w-3 h-3" />}
+                      {container.status === 'At Port' && <Anchor className="w-3 h-3" />}
+                      {container.status === 'In Transit' && <Ship className="w-3 h-3" />}
+                      {container.status}
+                      <Edit className="w-3 h-3 ml-1" />
+                    </button>
+                  </div>
+                </div>
 
-                  {/* Exporter Info */}
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                    <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      <User className="w-4 h-4" style={{ color: colors.primary }} />
-                      Exporter Details
-                    </h4>
+                {/* Assignment & Clearance Info */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Assignment Date</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.assignmentDate || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Clearance Status</p>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
+                      style={{
+                        backgroundColor: getClearanceStatusColor(container.clearanceStatus) + '20',
+                        color: getClearanceStatusColor(container.clearanceStatus)
+                      }}>
+                      {container.clearanceStatus}
+                    </span>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Payment Status</p>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
+                      style={{
+                        backgroundColor: container.paymentStatus === 'Paid' ? colors.success + '20' : colors.warning + '20',
+                        color: container.paymentStatus === 'Paid' ? colors.success : colors.warning
+                      }}>
+                      {container.paymentStatus}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ship Details & Expected Arrival */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Ship Details</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.shipDetails || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expected Arrival</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.expectedArrivalDate || container.eta || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Transporter Info */}
+                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                  <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    <Truck className="w-4 h-4" style={{ color: colors.primary }} />
+                    Assigned Inland Transporter
+                  </h4>
+                  {container.assignedTransporter ? (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-sm">
-                        <Building className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.exporter}
-                        </span>
+                      <div>
+                        <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {container.assignedTransporter.name}
+                        </p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {container.assignedTransporter.email}
+                        </p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {container.assignedTransporter.contact}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Mail className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.email}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Phone className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.contact}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleNotifyExporter(container)}
-                        className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                        style={{ backgroundColor: colors.info }}
-                      >
-                        <Mail className="w-3 h-3" />
-                        Notify Exporter
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {expandedContainerTab === 'booking' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Booking Details
-                    </h3>
-                    <button
-                      onClick={() => handleEditBooking(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <PenSquare className="w-3 h-3" />
-                      Edit
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Declared Cargo Value</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.declaredCargoValue || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Shipping Date</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.shippingDate || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ETA</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.eta || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Final Delivery</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.placeOfFinalDelivery || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pre-Carriage By</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.preCarriageBy || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Receipt</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.placeOfReceipt || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Vessel Name</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.vesselName || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Vessel SCAC</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.vesselSCAC || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Voyage Number</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.voyageNumber || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country Flag</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.countryFlag || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Loading</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.portOfLoading || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Pier/Terminal</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.loadingPierTerminal || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Originals Released At</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.originalsToBeReleasedAt || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Discharge</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.portOfDischarge || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Delivery</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.placeOfFinalDelivery || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type of Movement</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.typeOfMovement || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {expandedContainerTab === 'packing' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Packing Lists ({container.packingLists.length})
-                    </h3>
-                    <button
-                      onClick={() => handlePrint(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Printer className="w-3 h-3" />
-                      Print
-                    </button>
-                  </div>
-
-                  {container.packingLists.map((packingList) => (
-                    <div key={packingList.id} className={`border rounded-lg overflow-hidden ${
-                      isDark ? 'border-gray-700' : 'border-gray-200'
-                    }`}>
-                      <div
-                        className={`p-3 cursor-pointer flex items-center justify-between ${
-                          isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        }`}
-                        onClick={() => setExpandedPackingListId(
-                          expandedPackingListId === packingList.id ? null : packingList.id
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Package className="w-4 h-4" style={{ color: colors.primary }} />
-                          <div>
-                            <h4 className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {packingList.name}
-                            </h4>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {packingList.packages.length} packages
-                            </p>
+                      {container.transporterProgress !== null && (
+                        <div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                              Transport Progress: {container.transporterProgress}%
+                            </span>
+                            <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                              {container.transporterStatus}
+                            </span>
                           </div>
-                        </div>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${expandedPackingListId === packingList.id ? 'rotate-180' : ''} ${
-                          isDark ? 'text-gray-400' : 'text-gray-500'
-                        }`} />
-                      </div>
-
-                      {expandedPackingListId === packingList.id && (
-                        <div className={`p-3 border-t ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
-                          {packingList.packages.map((pkg) => (
-                            <div key={pkg.id} className="mb-3 last:mb-0">
-                              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <h5 className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {pkg.name}
-                                  </h5>
-                                  <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                    {pkg.quantity} items
-                                  </span>
-                                </div>
-                                <div className="space-y-1">
-                                  {pkg.items.map((item, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-sm">
-                                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                        {item.name}
-                                      </span>
-                                      <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                        {item.quantity} {item.unit}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${container.transporterProgress}%`,
+                                backgroundColor: getAgentProgressColor(container.transporterProgress)
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
-                  ))}
+                  ) : (
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      No transporter assigned
+                    </p>
+                  )}
                 </div>
-              )}
 
-              {expandedContainerTab === 'documents' && renderDocumentsTab(container)}
-
-              {expandedContainerTab === 'tracking' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Map className="w-5 h-5" style={{ color: colors.primary }} />
-                      <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Container Tracking
-                      </h3>
+                {/* Exporter Info */}
+                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                  <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    <User className="w-4 h-4" style={{ color: colors.primary }} />
+                    Exporter Details
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 text-sm">
+                      <Building className="w-4 h-4" style={{ color: colors.primary }} />
+                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                        {container.exporter}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <Mail className="w-4 h-4" style={{ color: colors.primary }} />
+                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                        {container.consignee.email}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <Phone className="w-4 h-4" style={{ color: colors.primary }} />
+                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                        {container.consignee.contact}
+                      </span>
                     </div>
                     <button
-                      onClick={() => handlePrint(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.primary }}
+                      onClick={() => handleNotifyExporter(container)}
+                      className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                      style={{ backgroundColor: colors.info }}
                     >
-                      <Printer className="w-3 h-3" />
-                      Print Tracking
+                      <Mail className="w-3 h-3" />
+                      Notify Exporter
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
 
-                  <div className={`p-6 rounded-lg border-2 border-dashed text-center ${
-                    isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-white'
+            {expandedContainerTab === 'booking' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Booking Details
+                  </h3>
+                  <button
+                    onClick={() => handleEditBooking(container)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <PenSquare className="w-3 h-3" />
+                    Edit
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Declared Cargo Value</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.declaredCargoValue || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Shipping Date</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.shippingDate || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ETA</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.eta || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Final Delivery</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.placeOfFinalDelivery || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pre-Carriage By</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.preCarriageBy || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Receipt</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.placeOfReceipt || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Vessel Name</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.vesselName || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Vessel SCAC</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.vesselSCAC || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Voyage Number</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.voyageNumber || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country Flag</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.countryFlag || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Loading</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.portOfLoading || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Pier/Terminal</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.loadingPierTerminal || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Originals Released At</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.originalsToBeReleasedAt || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Discharge</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.portOfDischarge || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Delivery</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.placeOfFinalDelivery || 'N/A'}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type of Movement</p>
+                    <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {container.typeOfMovement || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {expandedContainerTab === 'packing' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Packing Lists ({container.packingLists.length})
+                  </h3>
+                  <button
+                    onClick={() => handlePrint(container)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Printer className="w-3 h-3" />
+                    Print
+                  </button>
+                </div>
+
+                {container.packingLists.map((packingList) => (
+                  <div key={packingList.id} className={`border rounded-lg overflow-hidden ${
+                    isDark ? 'border-gray-700' : 'border-gray-200'
                   }`}>
-                    <Navigation className="w-12 h-12 mx-auto mb-3" style={{ color: colors.primary }} />
-                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Map View - Container {container.id}
-                    </p>
-                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Current Location: {container.location}
-                    </p>
-                    <button
-                      className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-                      style={{ backgroundColor: colors.primary }}
+                    <div
+                      className={`p-3 cursor-pointer flex items-center justify-between ${
+                        isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                      }`}
+                      onClick={() => setExpandedPackingListId(
+                        expandedPackingListId === packingList.id ? null : packingList.id
+                      )}
                     >
-                      Open Full Map View
-                    </button>
-                  </div>
-
-                  <div>
-                    <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Shipment Milestones
-                    </h4>
-                    <div className="space-y-3">
-                      {container.milestones.map((milestone, idx) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <div className="relative flex items-center justify-center w-6">
-                            {milestone.completed ? (
-                              <CheckCircle className="w-4 h-4" style={{ color: colors.success }} />
-                            ) : (
-                              <Clock className="w-4 h-4" style={{ color: colors.warning }} />
-                            )}
-                            {idx < container.milestones.length - 1 && (
-                              <div className={`absolute top-6 w-0.5 h-8 ${
-                                milestone.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <p className={`text-sm ${milestone.completed ? 'line-through' : ''} ${
-                              isDark ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                              {milestone.stage}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                              {milestone.date}
-                            </p>
-                          </div>
+                      <div className="flex items-center gap-3">
+                        <Package className="w-4 h-4" style={{ color: colors.primary }} />
+                        <div>
+                          <h4 className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {packingList.name}
+                          </h4>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {packingList.packages.length} packages
+                          </p>
                         </div>
-                      ))}
+                      </div>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${expandedPackingListId === packingList.id ? 'rotate-180' : ''} ${
+                        isDark ? 'text-gray-400' : 'text-gray-500'
+                      }`} />
                     </div>
-                  </div>
 
-                  <div>
-                    <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Tracking History
-                    </h4>
-                    <div className="space-y-2">
-                      {container.trackingHistory.map((track, idx) => (
-                        <div key={idx} className={`p-3 rounded-lg flex items-center justify-between ${
-                          isDark ? 'bg-gray-700' : 'bg-white'
-                        }`}>
-                          <div>
-                            <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {track.location}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {track.status}
-                            </p>
+                    {expandedPackingListId === packingList.id && (
+                      <div className={`p-3 border-t ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+                        {packingList.packages.map((pkg) => (
+                          <div key={pkg.id} className="mb-3 last:mb-0">
+                            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <h5 className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                  {pkg.name}
+                                </h5>
+                                <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                  {pkg.quantity} items
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                {pkg.items.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-sm">
+                                    <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                                      {item.name}
+                                    </span>
+                                    <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                      {item.quantity} {item.unit}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {track.date}
-                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {expandedContainerTab === 'documents' && renderDocumentsTab(container)}
+
+            {expandedContainerTab === 'tracking' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Map className="w-5 h-5" style={{ color: colors.primary }} />
+                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Container Tracking
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => handlePrint(container)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Printer className="w-3 h-3" />
+                    Print Tracking
+                  </button>
+                </div>
+
+                <div className={`p-6 rounded-lg border-2 border-dashed text-center ${
+                  isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-white'
+                }`}>
+                  <Navigation className="w-12 h-12 mx-auto mb-3" style={{ color: colors.primary }} />
+                  <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Map View - Container {container.id}
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Current Location: {container.location}
+                  </p>
+                  <button
+                    className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    Open Full Map View
+                  </button>
+                </div>
+
+                <div>
+                  <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Shipment Milestones
+                  </h4>
+                  <div className="space-y-3">
+                    {container.milestones.map((milestone, idx) => (
+                      <div key={idx} className="flex items-start gap-3">
+                        <div className="relative flex items-center justify-center w-6">
+                          {milestone.completed ? (
+                            <CheckCircle className="w-4 h-4" style={{ color: colors.success }} />
+                          ) : (
+                            <Clock className="w-4 h-4" style={{ color: colors.warning }} />
+                          )}
+                          {idx < container.milestones.length - 1 && (
+                            <div className={`absolute top-6 w-0.5 h-8 ${
+                              milestone.completed ? 'bg-green-500' : 'bg-gray-300'
+                            }`}></div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <div className="flex-1">
+                          <p className={`text-sm ${milestone.completed ? 'line-through' : ''} ${
+                            isDark ? 'text-gray-300' : 'text-gray-700'
+                          }`}>
+                            {milestone.stage}
+                          </p>
+                          <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            {milestone.date}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Tracking History
+                  </h4>
+                  <div className="space-y-2">
+                    {container.trackingHistory.map((track, idx) => (
+                      <div key={idx} className={`p-3 rounded-lg flex items-center justify-between ${
+                        isDark ? 'bg-gray-700' : 'bg-white'
+                      }`}>
+                        <div>
+                          <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {track.location}
+                          </p>
+                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {track.status}
+                          </p>
+                        </div>
+                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {track.date}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </td>
-      </tr>
-    );
-  };
+
+          {/* HIDE DETAILS BUTTON - ADDED AT THE BOTTOM */}
+          <div className="mt-4 pt-4 border-t flex justify-center" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+            <button
+              onClick={() => toggleContainerExpand(container.id)}
+              className="px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:opacity-80 flex items-center gap-2"
+              style={{
+                backgroundColor: colors.danger + '20',
+                color: colors.danger
+              }}
+            >
+              <ChevronDown className="w-4 h-4 rotate-180" />
+              Hide Details
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 
   // Render Grid View
   const renderGridView = () => {
@@ -2788,6 +4051,7 @@ const FreightForwarderDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {currentContainers.map((container) => {
           const transitInfo = getTransitStatusDisplay(container);
+          const vesselInfo = vesselDataStorage[container.id];
           return (
             <div key={container.id} className={`rounded-lg transition-all duration-300 ${
               isDark ? 'bg-gray-700 border border-gray-600' : 'bg-white shadow-md'
@@ -2800,13 +4064,16 @@ const FreightForwarderDashboard = () => {
                       {container.id}
                     </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full`}
+                  <button
+                    onClick={() => handleOpenStatusModal(container)}
+                    className={`text-xs px-2 py-1 rounded-full transition-all duration-200 hover:opacity-80`}
                     style={{
                       backgroundColor: getStatusColor(container.status) + '20',
                       color: getStatusColor(container.status)
-                    }}>
+                    }}
+                  >
                     {container.status}
-                  </span>
+                  </button>
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
@@ -2848,6 +4115,25 @@ const FreightForwarderDashboard = () => {
                     <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA:</span>
                     <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.expectedArrivalDate || container.eta}</span>
                   </div>
+                  {vesselInfo && (
+                    <div className="flex justify-between items-center">
+                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Vessel:</span>
+                      <button
+                        onClick={() => handleOpenVesselModal(container)}
+                        className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 transition-all duration-200 hover:opacity-80`}
+                        style={{
+                          backgroundColor: colors.primary + '20',
+                          color: colors.primary
+                        }}
+                      >
+                        {vesselInfo.type === 'ship' && <Ship className="w-3 h-3" />}
+                        {vesselInfo.type === 'plane' && <Plane className="w-3 h-3" />}
+                        {vesselInfo.type === 'truck' && <Truck className="w-3 h-3" />}
+                        {vesselInfo.type === 'train' && <Train className="w-3 h-3" />}
+                        {vesselInfo.name || 'Add Vessel'}
+                      </button>
+                    </div>
+                  )}
                   {container.delayed && (
                     <div className="flex justify-between text-red-500">
                       <span className="text-xs">⚠️ Delayed</span>
@@ -3047,14 +4333,34 @@ const FreightForwarderDashboard = () => {
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Welcome back, {user?.name || 'John'}! 👋
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Here's your freight forwarder dashboard with all bookings.
-          </p>
+        {/* Header with New Booking Buttons */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Welcome back, {user?.name || 'John'}! 👋
+            </h1>
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Here's your freight forwarder dashboard with all bookings.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleNewBooking('new')}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+              style={{ backgroundColor: colors.primary }}
+            >
+              <Plus className="w-4 h-4" />
+              New Booking
+            </button>
+           <button
+            onClick={() => navigate('/freight-forwarder/booking/process')}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+            style={{ backgroundColor: colors.info }}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Process Booking
+          </button>
+          </div>
         </div>
 
         {/* Stats Cards - Clickable with ring indicators */}
@@ -3335,9 +4641,9 @@ const FreightForwarderDashboard = () => {
                     style={{ focusRingColor: colors.primary }}
                   >
                     <option value="all">Status</option>
-                    <option value="At Port">At Port</option>
-                    <option value="In Transit">In Transit</option>
-                    <option value="Cleared">Cleared</option>
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
                   </select>
 
                   <select
@@ -3380,13 +4686,13 @@ const FreightForwarderDashboard = () => {
                       <thead>
                         <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Container
+                            Consignment
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Exporter
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Assigned
+                            Date
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Status
@@ -3436,13 +4742,19 @@ const FreightForwarderDashboard = () => {
                                   </span>
                                 </td>
                                 <td className="py-2 px-2">
-                                  <span className={`text-xs px-1.5 py-0.5 rounded-full`}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenStatusModal(container);
+                                    }}
+                                    className={`text-xs px-1.5 py-0.5 rounded-full transition-all duration-200 hover:opacity-80`}
                                     style={{
-                                      backgroundColor: getAssignmentStatusColor(container.assignmentStatus) + '20',
-                                      color: getAssignmentStatusColor(container.assignmentStatus)
-                                    }}>
-                                    {container.assignmentStatus}
-                                  </span>
+                                      backgroundColor: getStatusColor(container.status) + '20',
+                                      color: getStatusColor(container.status)
+                                    }}
+                                  >
+                                    {container.status}
+                                  </button>
                                 </td>
                                 <td className="py-2 px-2">
                                   <span className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1`}
@@ -3482,6 +4794,17 @@ const FreightForwarderDashboard = () => {
                                       title="View"
                                     >
                                       <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
+                                      style={{ color: colors.primary }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenVesselModal(container);
+                                      }}
+                                      title="Vessel"
+                                    >
+                                      <Ship className="w-3.5 h-3.5" />
                                     </button>
                                     {container.assignmentStatus === 'Pending' && (
                                       <>
@@ -3567,6 +4890,17 @@ const FreightForwarderDashboard = () => {
                                       title="Print"
                                     >
                                       <Printer className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      className="p-1 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-600"
+                                      style={{ color: colors.primary }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleContainerExpand(container.id);
+                                      }}
+                                      title={expandedContainerId === container.id ? 'Collapse' : 'Expand'}
+                                    >
+                                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedContainerId === container.id ? 'rotate-180' : ''}`} />
                                     </button>
                                   </div>
                                 </td>
@@ -3832,6 +5166,9 @@ const FreightForwarderDashboard = () => {
       {showPrintModal && <PrintModal />}
       {showEditModal && <EditBookingModal />}
       {showNotifyModal && <NotifyModal />}
+      {showVesselModal && <VesselModal />}
+      {showStatusModal && <StatusModal />}
+      {showNewBookingModal && <NewBookingModal />}
     </div>
   );
 };

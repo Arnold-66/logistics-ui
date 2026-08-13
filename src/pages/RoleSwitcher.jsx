@@ -38,21 +38,33 @@ import {
 
 const RoleSwitcher = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user, switchRole, logout } = useAuth();
   const [selectedRole, setSelectedRole] = useState(null);
   const [isSwitching, setIsSwitching] = useState(false);
 
+  // const colors = {
+  //   primary: '#714b67',
+  //   primaryLight: '#8a5f7e',
+  //   primaryDark: '#5a3a52',
+  //   primaryBg: '#f5f0f4',
+  //   primaryBgDark: '#2d1f29',
+  //   success: '#10b981',
+  //   warning: '#f59e0b',
+  //   info: '#3b82f6',
+  //   danger: '#ef4444',
+  // };
+
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
     info: '#3b82f6',
-    danger: '#ef4444',
+    danger: theme.danger || '#ef4444',
   };
 
   const isDark = darkMode;

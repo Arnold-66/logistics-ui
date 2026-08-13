@@ -1,4 +1,4 @@
-// NewImport.jsx - Complete workflow with Odoo-style tables (FIXED with bulk actions)
+// NewImport.jsx - Complete workflow with Odoo-style tables (UPDATED)
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   Package,
@@ -49,11 +49,17 @@ import {
   Check,
   Minus,
   Copy as CopyIcon,
-  FileText
+  FileText,
+  UserPlus,
+  Building,
+  Phone,
+  AtSign
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import ProgressBar from '../../components/ProgressBar';
+// Add these with the other useState declarations
 
 // Mock user profile data
 const USER_PROFILE = {
@@ -72,12 +78,49 @@ const SYSTEM_SUPPLIERS = [
   { id: 'SUP-001', name: 'TechGlobal Supplies Ltd', email: 'info@techglobal.com', phone: '+256 701 234 567' },
   { id: 'SUP-002', name: 'East African Traders', email: 'sales@eatraders.com', phone: '+256 702 345 678' },
   { id: 'SUP-003', name: 'Kampala Distributors Ltd', email: 'info@kampaladist.com', phone: '+256 703 456 789' },
+  { id: 'SUP-004', name: 'Nairobi Logistics Hub', email: 'info@nairobiology.com', phone: '+254 700 123 456' },
+  { id: 'SUP-005', name: 'Mombasa Maritime Supplies', email: 'info@mombasamaritime.com', phone: '+254 701 234 567' },
 ];
+
+// Mock supplier responses (for view-only step)
+const MOCK_SUPPLIER_RESPONSES = {
+  'SUP-001': {
+    status: 'approved',
+    message: 'All items confirmed as available. Ready for shipment.',
+    respondedAt: '2026-08-10 14:30'
+  },
+  'SUP-002': {
+    status: 'approved',
+    message: 'Items confirmed. Some items have partial availability.',
+    respondedAt: '2026-08-10 10:15'
+  },
+  'SUP-003': {
+    status: 'pending',
+    message: 'Awaiting confirmation from supplier.',
+    respondedAt: null
+  },
+  'SUP-004': {
+    status: 'rejected',
+    message: 'Supplier unable to fulfill order at this time.',
+    respondedAt: '2026-08-09 16:45'
+  },
+  'SUP-005': {
+    status: 'approved',
+    message: 'All items confirmed. Ready for shipment.',
+    respondedAt: '2026-08-10 12:00'
+  }
+};
 
 // Helper function to ensure item has all required properties
 const ensureItemStructure = (item) => {
   return {
     ...item,
+    supplierId: item.supplierId || '',
+    supplierName: item.supplierName || '',
+    supplierEmail: item.supplierEmail || '',
+    sentToSupplier: item.sentToSupplier || false,
+    sentAt: item.sentAt || null,
+    supplierResponse: item.supplierResponse || null,
     pvoc: {
       certificateNumber: '',
       issueDate: '',
@@ -95,13 +138,19 @@ const ensureItemStructure = (item) => {
       uploadedDocuments: [],
       ...item.coc,
       uploadedDocuments: item.coc?.uploadedDocuments || []
+    },
+    commercialInvoice: {
+      document: null,
+      uploadedAt: null,
+      status: 'pending',
+      ...item.commercialInvoice
     }
   };
 };
 
 const NewImport = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const [currentStep, setCurrentStep] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -110,18 +159,19 @@ const NewImport = () => {
   const [viewingDocument, setViewingDocument] = useState(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
-  const [selectedSupplier, setSelectedSupplier] = useState('');
-  const [supplierEmail, setSupplierEmail] = useState('');
-  const [supplierName, setSupplierName] = useState('');
+  const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
   const [orderStatus, setOrderStatus] = useState('draft');
   const [reviewItems, setReviewItems] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPVoCModal, setShowPVoCModal] = useState(false);
   const [showCoCModal, setShowCoCModal] = useState(false);
+  const [showCommercialInvoiceModal, setShowCommercialInvoiceModal] = useState(false);
   const [activePVoCItem, setActivePVoCItem] = useState(null);
   const [activeCoCItem, setActiveCoCItem] = useState(null);
+  const [activeCommercialInvoiceItem, setActiveCommercialInvoiceItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSupplier, setFilterSupplier] = useState('all');
   const [editingCell, setEditingCell] = useState(null);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
@@ -130,6 +180,23 @@ const NewImport = () => {
   const [addingRow, setAddingRow] = useState(false);
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [selectedItemForSupplier, setSelectedItemForSupplier] = useState(null);
+  const [supplierModalSearch, setSupplierModalSearch] = useState('');
+  const [showSupplierAssignmentModal, setShowSupplierAssignmentModal] = useState(false);
+
+
+
+  // New supplier form
+  const [newSupplierData, setNewSupplierData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    contactPerson: '',
+    address: '',
+    tinNumber: '',
+  });
+
+  // Invoice data
   const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -141,7 +208,9 @@ const NewImport = () => {
     notes: '',
     uploadedDocuments: [],
     paymentStatus: 'pending', // pending, paid, partially_paid
-    payments: []
+    payments: [],
+    supplierConfirmedPayment: false,
+    paymentConfirmedAt: null
   });
 
   const [importData, setImportData] = useState({
@@ -162,7 +231,13 @@ const NewImport = () => {
         supplierStatus: 'pending',
         supplierNotes: '',
         supplierQuantity: '',
-        customFields: {}
+        customFields: {},
+        supplierId: '',
+        supplierName: '',
+        supplierEmail: '',
+        sentToSupplier: false,
+        sentAt: null,
+        supplierResponse: null
       })
     ],
     importNumber: '',
@@ -172,25 +247,21 @@ const NewImport = () => {
     progress: 0,
   });
 
-
-
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
-    border: '#e2e8f0',
-    hover: '#f7fafc',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
 
-  // Define steps
+  // Define steps (reduced to 5 steps)
   const steps = [
     {
       id: 0,
@@ -201,41 +272,33 @@ const NewImport = () => {
     },
     {
       id: 1,
-      title: 'Items Review',
+      title: 'Items Review & Suppliers',
       icon: ClipboardList,
-      description: 'Review and manage your items list',
+      description: 'Review items and assign suppliers to each item',
       required: true,
     },
     {
       id: 2,
-      title: 'Send to Supplier',
-      icon: Send,
-      description: 'Send item list to supplier for confirmation',
+      title: 'Supplier Confirmation',
+      icon: FileCheck,
+      description: 'View supplier confirmations and responses',
       required: true,
     },
     {
       id: 3,
-      title: 'Supplier Confirmation',
-      icon: FileCheck,
-      description: 'Review supplier confirmation and availability',
+      title: 'Invoice & Payment',
+      icon: DollarSign,
+      description: 'Review invoice, make payment, confirm receipt',
       required: true,
     },
     {
       id: 4,
-      title: 'Invoice & Payment',
-      icon: DollarSign,
-      description: 'Review supplier invoice and make payment',
-      required: true,
-    },
-    {
-      id: 5,
       title: 'Order Finalisation',
       icon: FileSignature,
-      description: 'Request and attach UNBS documents',
+      description: 'Upload Commercial Invoice and UNBS documents',
       required: true,
     }
   ];
-
 
   // Auto-save effect
   useEffect(() => {
@@ -244,7 +307,7 @@ const NewImport = () => {
     }, 3000);
 
     return () => clearTimeout(saveTimeout);
-  }, [importData, orderStatus, reviewItems, selectedSupplier, supplierEmail, supplierName, customColumns]);
+  }, [importData, orderStatus, reviewItems, customColumns]);
 
   // Load saved data
   useEffect(() => {
@@ -259,10 +322,8 @@ const NewImport = () => {
         });
         if (parsed.orderStatus) setOrderStatus(parsed.orderStatus);
         if (parsed.reviewItems) setReviewItems(parsed.reviewItems);
-        if (parsed.selectedSupplier) setSelectedSupplier(parsed.selectedSupplier);
-        if (parsed.supplierEmail) setSupplierEmail(parsed.supplierEmail);
-        if (parsed.supplierName) setSupplierName(parsed.supplierName);
         if (parsed.customColumns) setCustomColumns(parsed.customColumns);
+        if (parsed.invoiceData) setInvoiceData(parsed.invoiceData);
         // Expand all items
         const allIds = new Set(fixedItems.map(item => item.id));
         setExpandedItems(allIds);
@@ -277,10 +338,8 @@ const NewImport = () => {
       ...importData,
       orderStatus,
       reviewItems,
-      selectedSupplier,
-      supplierEmail,
-      supplierName,
       customColumns,
+      invoiceData,
       updatedAt: new Date().toISOString(),
       currentStep
     };
@@ -299,10 +358,8 @@ const NewImport = () => {
         ...importData,
         orderStatus,
         reviewItems,
-        selectedSupplier,
-        supplierEmail,
-        supplierName,
         customColumns,
+        invoiceData,
         updatedAt: new Date().toISOString(),
         currentStep
       };
@@ -326,11 +383,10 @@ const NewImport = () => {
 
   const calculateProgress = () => {
     let progress = 0;
-    if (importData.items.length > 0) progress += 16;
-    if (orderStatus !== 'draft') progress += 16;
-    if (orderStatus === 'sent' || orderStatus === 'review') progress += 16;
-    if (orderStatus === 'confirmed') progress += 16;
-    if (invoiceData.paymentStatus === 'paid') progress += 16;
+    if (importData.items.length > 0) progress += 20;
+    if (orderStatus === 'sent' || orderStatus === 'review') progress += 20;
+    if (orderStatus === 'confirmed') progress += 20;
+    if (invoiceData.paymentStatus === 'paid' && invoiceData.supplierConfirmedPayment) progress += 20;
     if (orderStatus === 'finalized') progress += 20;
     return progress;
   };
@@ -338,7 +394,7 @@ const NewImport = () => {
   useEffect(() => {
     const progress = calculateProgress();
     setImportData(prev => ({ ...prev, progress }));
-  }, [importData.items, orderStatus]);
+  }, [importData.items, orderStatus, invoiceData.paymentStatus, invoiceData.supplierConfirmedPayment]);
 
   // Handle invoice upload
   const handleInvoiceUpload = (file) => {
@@ -384,7 +440,9 @@ const NewImport = () => {
           amount: '',
           method: 'bank_transfer',
           reference: '',
-          notes: ''
+          notes: '',
+          confirmedBySupplier: false,
+          confirmedAt: null
         }
       ]
     }));
@@ -413,12 +471,21 @@ const NewImport = () => {
       return;
     }
     setInvoiceData(prev => ({ ...prev, paymentStatus: 'paid' }));
-    setOrderStatus('confirmed');
-    showToast('Invoice marked as paid!', 'success');
+    showToast('Invoice marked as paid! Waiting for supplier confirmation.', 'success');
   };
 
+  // Confirm payment received by supplier
+  const confirmPaymentReceived = () => {
+    setInvoiceData(prev => ({
+      ...prev,
+      supplierConfirmedPayment: true,
+      paymentConfirmedAt: new Date().toISOString()
+    }));
+    setOrderStatus('confirmed');
+    showToast('Supplier confirmed payment received!', 'success');
+  };
 
-  // Add a new empty row directly
+  // Add a new empty row
   const addRow = () => {
     const newItem = ensureItemStructure({
       id: Date.now(),
@@ -435,7 +502,13 @@ const NewImport = () => {
       supplierStatus: 'pending',
       supplierNotes: '',
       supplierQuantity: '',
-      customFields: {}
+      customFields: {},
+      supplierId: '',
+      supplierName: '',
+      supplierEmail: '',
+      sentToSupplier: false,
+      sentAt: null,
+      supplierResponse: null
     });
     
     setImportData(prev => ({
@@ -499,7 +572,13 @@ const NewImport = () => {
         ...item,
         id: newId,
         itemCode: `${item.itemCode}-COPY`,
-        customFields: { ...item.customFields }
+        customFields: { ...item.customFields },
+        supplierId: '',
+        supplierName: '',
+        supplierEmail: '',
+        sentToSupplier: false,
+        sentAt: null,
+        supplierResponse: null
       });
     });
     
@@ -529,6 +608,8 @@ const NewImport = () => {
       'Quantity': item.quantity,
       'Unit Price': item.unitPrice,
       'Total Value': item.totalValue,
+      'Supplier': item.supplierName || '',
+      'Supplier Email': item.supplierEmail || '',
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -571,7 +652,6 @@ const NewImport = () => {
       name: newColumnName, 
       type: newColumnType 
     }]);
-    // Add the field to all existing items
     setImportData(prev => ({
       ...prev,
       items: prev.items.map(item => ({
@@ -597,6 +677,92 @@ const NewImport = () => {
     showToast('Column removed', 'info');
   };
 
+  // Handle supplier assignment for an item
+  const assignSupplier = (itemId, supplierId) => {
+    const supplier = SYSTEM_SUPPLIERS.find(s => s.id === supplierId);
+    if (supplier) {
+      setImportData(prev => ({
+        ...prev,
+        items: prev.items.map(item =>
+          item.id === itemId ? {
+            ...item,
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            supplierEmail: supplier.email
+          } : item
+        )
+      }));
+      showToast(`Supplier ${supplier.name} assigned to item`, 'success');
+    }
+  };
+
+  // Handle creating a new supplier
+  const createNewSupplier = () => {
+    if (!newSupplierData.name || !newSupplierData.email) {
+      showToast('Please enter at least name and email', 'error');
+      return;
+    }
+    
+    const newSupplier = {
+      id: `SUP-${String(SYSTEM_SUPPLIERS.length + 1).padStart(3, '0')}`,
+      name: newSupplierData.name,
+      email: newSupplierData.email,
+      phone: newSupplierData.phone || '',
+      contactPerson: newSupplierData.contactPerson || '',
+      address: newSupplierData.address || '',
+      tinNumber: newSupplierData.tinNumber || '',
+    };
+    
+    SYSTEM_SUPPLIERS.push(newSupplier);
+    setShowNewSupplierModal(false);
+    setNewSupplierData({
+      name: '',
+      email: '',
+      phone: '',
+      contactPerson: '',
+      address: '',
+      tinNumber: '',
+    });
+    showToast(`Supplier ${newSupplier.name} created successfully!`, 'success');
+  };
+
+  // Send items to supplier(s)
+  const handleSendToSuppliers = () => {
+    const itemsWithoutSupplier = importData.items.filter(item => !item.supplierId);
+    if (itemsWithoutSupplier.length > 0) {
+      showToast(`${itemsWithoutSupplier.length} item(s) have no supplier assigned`, 'error');
+      return;
+    }
+
+    // Update all items to sent status
+    setImportData(prev => ({
+      ...prev,
+      items: prev.items.map(item => ({
+        ...item,
+        sentToSupplier: true,
+        sentAt: new Date().toISOString()
+      }))
+    }));
+    
+    setOrderStatus('sent');
+    saveProgress();
+    showToast(`${importData.items.length} item(s) sent to suppliers successfully!`, 'success');
+  };
+
+  // Handle supplier response (view-only in this step, but we can simulate)
+  const viewSupplierResponse = (itemId) => {
+    const item = importData.items.find(i => i.id === itemId);
+    if (item && item.supplierId) {
+      const response = MOCK_SUPPLIER_RESPONSES[item.supplierId];
+      if (response) {
+        showToast(`Supplier ${item.supplierName} response: ${response.message}`, 'info');
+        return;
+      }
+    }
+    showToast('No response from supplier yet', 'info');
+  };
+
+  // Update PVoC field
   const updatePVoCField = (itemId, field, value) => {
     setImportData(prev => ({
       ...prev,
@@ -613,6 +779,7 @@ const NewImport = () => {
     }));
   };
 
+  // Update CoC field
   const updateCoCField = (itemId, field, value) => {
     setImportData(prev => ({
       ...prev,
@@ -623,6 +790,22 @@ const NewImport = () => {
             ...item.coc, 
             uploadedDocuments: item.coc?.uploadedDocuments || [],
             [field]: value 
+          }
+        } : item
+      )
+    }));
+  };
+
+  // Update Commercial Invoice
+  const updateCommercialInvoice = (itemId, field, value) => {
+    setImportData(prev => ({
+      ...prev,
+      items: prev.items.map(item => 
+        item.id === itemId ? {
+          ...item,
+          commercialInvoice: {
+            ...item.commercialInvoice,
+            [field]: value
           }
         } : item
       )
@@ -658,10 +841,15 @@ const NewImport = () => {
           supplierStatus: 'pending',
           supplierNotes: '',
           supplierQuantity: '',
-          customFields: {}
+          customFields: {},
+          supplierId: '',
+          supplierName: '',
+          supplierEmail: '',
+          sentToSupplier: false,
+          sentAt: null,
+          supplierResponse: null
         }));
 
-        // Detect custom columns from imported data
         const allKeys = Object.keys(jsonData[0] || {});
         const standardKeys = ['Item Code', 'itemCode', 'Item Name', 'itemName', 'Item Group', 'itemGroup', 'Stock UOM', 'stockUOM', 'Barcode', 'barcode', 'Standard Selling Rate', 'standardSellingRate', 'Quantity', 'quantity', 'Unit Price', 'unitPrice', 'Total Value', 'totalValue'];
         const customKeys = allKeys.filter(key => !standardKeys.includes(key));
@@ -701,6 +889,8 @@ const NewImport = () => {
       'Quantity': 'quantity',
       'Unit Price': 'unitPrice',
       'Total Value': 'totalValue',
+      'Supplier': 'supplierName',
+      'Supplier Email': 'supplierEmail',
     };
 
     const customHeaders = customColumns.reduce((acc, col) => {
@@ -727,55 +917,6 @@ const NewImport = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Items');
     XLSX.writeFile(wb, `Import_Items_${new Date().toISOString().split('T')[0]}.xlsx`);
     showToast('Items exported successfully!', 'success');
-  };
-
-  const handleSendToSupplier = () => {
-    if (!selectedSupplier && !supplierEmail) {
-      showToast('Please select a supplier or enter email', 'error');
-      return;
-    }
-
-    setOrderStatus('sent');
-    saveProgress();
-    showToast('Item list sent to supplier successfully!', 'success');
-  };
-
-  const handleSupplierConfirmation = (itemId, status, notes = '', quantity = '') => {
-    setReviewItems(prev => ({
-      ...prev,
-      [itemId]: { status, notes, quantity }
-    }));
-
-    setImportData(prev => ({
-      ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? { ...item, supplierStatus: status, supplierNotes: notes, supplierQuantity: quantity } : item
-      )
-    }));
-
-    // Check if all items are reviewed
-    const allItems = importData.items;
-    const allReviewed = allItems.every(item => 
-      (reviewItems[item.id] && reviewItems[item.id].status !== 'pending') || 
-      (item.id === itemId && status !== 'pending')
-    );
-
-    if (allReviewed) {
-      setOrderStatus('confirmed');
-      showToast('All items reviewed by supplier!', 'success');
-    }
-  };
-
-  const handleConfirmOrder = () => {
-    setShowConfirmModal(true);
-  };
-
-  const finalizeOrder = () => {
-    setOrderStatus('finalized');
-    setShowConfirmModal(false);
-    const importNumber = `IMP-${Date.now().toString().slice(-8)}`;
-    setImportData(prev => ({ ...prev, importNumber }));
-    showToast(`Order ${importNumber} finalized successfully!`, 'success');
   };
 
   const handlePVoCUpload = (itemId, file) => {
@@ -840,6 +981,39 @@ const NewImport = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleCommercialInvoiceUpload = (itemId, file) => {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const newDocument = {
+        id: Date.now(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadDate: new Date().toISOString(),
+        data: reader.result,
+      };
+
+      setImportData(prev => ({
+        ...prev,
+        items: prev.items.map(item => 
+          item.id === itemId ? {
+            ...item,
+            commercialInvoice: {
+              ...item.commercialInvoice,
+              document: newDocument,
+              uploadedAt: new Date().toISOString(),
+              status: 'uploaded'
+            }
+          } : item
+        )
+      }));
+      showToast(`Commercial Invoice uploaded successfully!`, 'success');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const removeDocument = (itemId, docType, docId) => {
     setImportData(prev => ({
       ...prev,
@@ -872,6 +1046,9 @@ const NewImport = () => {
       case 'unavailable': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
       case 'partial': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
       case 'confirmed': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'approved': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+      case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      case 'uploaded': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
       default: return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
     }
   };
@@ -879,7 +1056,7 @@ const NewImport = () => {
   const getOrderStatusDisplay = (status) => {
     switch (status) {
       case 'draft': return 'Draft';
-      case 'sent': return 'Sent to Supplier';
+      case 'sent': return 'Sent to Suppliers';
       case 'review': return 'Under Review';
       case 'confirmed': return 'Confirmed';
       case 'finalized': return 'Finalized';
@@ -917,406 +1094,6 @@ const NewImport = () => {
         <button onClick={() => setToast(null)} className="ml-2 hover:opacity-80">
           <X className="w-4 h-4" />
         </button>
-      </div>
-    );
-  };
-
-  // Render Invoice & Payment Step
-  const renderInvoicePaymentStep = () => {
-    const totalItemsValue = getTotalItemsValue();
-    const taxAmount = totalItemsValue * 0.18; // 18% VAT
-    const shippingCost = totalItemsValue * 0.05; // 5% shipping
-    const totalAmount = totalItemsValue + taxAmount + shippingCost;
-
-    return (
-      <div className="space-y-6">
-        {/* Invoice Summary */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Invoice Summary
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Subtotal</p>
-              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {formatCurrency(totalItemsValue)}
-              </p>
-            </div>
-            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tax (18%)</p>
-              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {formatCurrency(taxAmount)}
-              </p>
-            </div>
-            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Shipping</p>
-              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {formatCurrency(shippingCost)}
-              </p>
-            </div>
-            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`} style={{ borderLeft: `4px solid ${colors.primary}` }}>
-              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p>
-              <p className={`text-lg font-bold`} style={{ color: colors.primary }}>
-                {formatCurrency(totalAmount)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Invoice Details */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Invoice Details
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Invoice Number
-              </label>
-              <input
-                type="text"
-                value={invoiceData.invoiceNumber}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="e.g., INV-2024-001"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Supplier Invoice Number
-              </label>
-              <input
-                type="text"
-                value={invoiceData.supplierInvoiceNumber}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-                placeholder="Supplier's invoice number"
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Invoice Date
-              </label>
-              <input
-                type="date"
-                value={invoiceData.invoiceDate}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Due Date
-              </label>
-              <input
-                type="date"
-                value={invoiceData.dueDate}
-                onChange={(e) => setInvoiceData(prev => ({ ...prev, dueDate: e.target.value }))}
-                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-          </div>
-          <div className="mt-4">
-            <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Notes
-            </label>
-            <textarea
-              value={invoiceData.notes}
-              onChange={(e) => setInvoiceData(prev => ({ ...prev, notes: e.target.value }))}
-              rows="3"
-              className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-              placeholder="Additional notes..."
-            />
-          </div>
-
-          {/* Invoice Document Upload */}
-          <div className={`mt-4 p-4 rounded-lg border-2 border-dashed ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Upload Invoice Document
-                </p>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {(invoiceData.uploadedDocuments || []).length} document(s)
-                </p>
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                className="hidden"
-                id="invoiceUpload"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    handleInvoiceUpload(file);
-                  }
-                  e.target.value = '';
-                }}
-              />
-              <button
-                onClick={() => document.getElementById('invoiceUpload').click()}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Upload className="w-4 h-4" />
-                Upload
-              </button>
-            </div>
-            {(invoiceData.uploadedDocuments || []).map((doc) => (
-              <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-50'} flex items-center justify-between`}>
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {getFileIcon(doc.type)}
-                  <span className="text-sm truncate">{doc.name}</span>
-                  <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(doc.size)}</span>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => {
-                      setViewingDocument(doc);
-                      setShowDocumentViewer(true);
-                    }}
-                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Eye className="w-3 h-3 text-blue-500" />
-                  </button>
-                  <button
-                    onClick={() => removeInvoiceDocument(doc.id)}
-                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="w-3 h-3 text-red-500" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Payment Section */}
-        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Payment Details
-            </h3>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              invoiceData.paymentStatus === 'paid' 
-                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                : invoiceData.paymentStatus === 'partially_paid'
-                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
-            }`}>
-              {invoiceData.paymentStatus.charAt(0).toUpperCase() + invoiceData.paymentStatus.slice(1)}
-            </span>
-          </div>
-
-          <button
-            onClick={addPayment}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md mb-4"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Plus className="w-4 h-4" />
-            Add Payment
-          </button>
-
-          {(invoiceData.payments || []).map((payment, index) => (
-            <div key={payment.id} className={`p-4 rounded-lg mb-3 ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
-              <div className="flex justify-between items-center mb-2">
-                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Payment #{index + 1}
-                </span>
-                <button
-                  onClick={() => removePayment(index)}
-                  className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Payment Date
-                  </label>
-                  <input
-                    type="date"
-                    value={payment.paymentDate}
-                    onChange={(e) => updatePayment(index, 'paymentDate', e.target.value)}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                  />
-                </div>
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Amount (UGX)
-                  </label>
-                  <input
-                    type="number"
-                    value={payment.amount}
-                    onChange={(e) => updatePayment(index, 'amount', e.target.value)}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Payment Method
-                  </label>
-                  <select
-                    value={payment.method}
-                    onChange={(e) => updatePayment(index, 'method', e.target.value)}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                  >
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="wire_transfer">Wire Transfer</option>
-                    <option value="letter_of_credit">Letter of Credit</option>
-                    <option value="cash">Cash</option>
-                    <option value="mobile_money">Mobile Money</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Reference Number
-                  </label>
-                  <input
-                    type="text"
-                    value={payment.reference}
-                    onChange={(e) => updatePayment(index, 'reference', e.target.value)}
-                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    style={{ focusRingColor: colors.primary }}
-                    placeholder="Reference number"
-                  />
-                </div>
-              </div>
-              <div className="mt-2">
-                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Notes
-                </label>
-                <input
-                  type="text"
-                  value={payment.notes || ''}
-                  onChange={(e) => updatePayment(index, 'notes', e.target.value)}
-                  className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
-                    isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ focusRingColor: colors.primary }}
-                  placeholder="Payment notes..."
-                />
-              </div>
-            </div>
-          ))}
-
-          {(invoiceData.payments || []).length > 0 && invoiceData.paymentStatus !== 'paid' && (
-            <button
-              onClick={markAsPaid}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg mt-4"
-              style={{ backgroundColor: colors.success }}
-            >
-              <CheckCircle className="w-4 h-4" />
-              Mark as Paid
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // Full page document viewer
-  const DocumentViewerPage = ({ doc, onClose }) => {
-    if (!doc) return null;
-
-    return (
-      <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-gray-900">
-        {/* Header */}
-        <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex items-center gap-3 min-w-0">
-            {getFileIcon(doc.type)}
-            <div className="min-w-0">
-              <h3 className={`text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {doc.name}
-              </h3>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {formatFileSize(doc.size)} • Uploaded {new Date(doc.uploadDate).toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = doc.data;
-                link.download = doc.name;
-                link.click();
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        
-        {/* Document Content */}
-        <div className="flex-1 p-6 overflow-auto">
-          {doc.type?.startsWith('image/') ? (
-            <img src={doc.data} alt={doc.name} className="max-w-full max-h-full object-contain mx-auto" />
-          ) : doc.type === 'application/pdf' ? (
-            <iframe 
-              src={doc.data} 
-              className="w-full h-full min-h-[600px] rounded-lg border"
-              title={doc.name}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full py-12">
-              <File className="w-24 h-24 mx-auto mb-4 text-gray-400" />
-              <p className={`text-lg ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                Preview not available for this file type
-              </p>
-              <button 
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = doc.data;
-                  link.download = doc.name;
-                  link.click();
-                }}
-                className="mt-4 px-6 py-3 rounded-lg text-white text-sm font-medium transition-all duration-200 hover:shadow-lg"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Download className="w-4 h-4 inline mr-2" />
-                Download File
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     );
   };
@@ -1438,7 +1215,6 @@ const NewImport = () => {
 
     return (
       <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        {/* Table Toolbar */}
         <div className={`flex items-center justify-between p-3 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex items-center gap-2">
             {showCheckboxes && (
@@ -1485,10 +1261,8 @@ const NewImport = () => {
           </div>
         </div>
 
-        {/* Bulk Actions */}
         {bulkActions}
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
@@ -1535,7 +1309,7 @@ const NewImport = () => {
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+            <tbody className="divide-y" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
               {sortedItems.map((item, index) => (
                 <tr key={item.id} className={`${isDark ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors ${index % 2 === 0 ? (isDark ? 'bg-gray-800/50' : 'bg-white') : (isDark ? 'bg-gray-700/30' : 'bg-gray-50/50')}`}>
                   {showCheckboxes && (
@@ -1632,7 +1406,6 @@ const NewImport = () => {
 
   // Render Preparation Step with Odoo-style table
   const renderPreparationStep = () => {
-    // Define columns for preparation step
     const prepColumns = [
       { key: 'itemCode', label: 'Item Code', type: 'text', placeholder: 'e.g., ITEM-001' },
       { key: 'itemName', label: 'Item Name', type: 'text', placeholder: 'e.g., Laptop Computer' },
@@ -1645,7 +1418,6 @@ const NewImport = () => {
       { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false },
     ];
 
-    // Add custom columns
     const allColumns = [...prepColumns, ...customColumns.map(col => ({
       ...col,
       label: col.name,
@@ -1662,7 +1434,6 @@ const NewImport = () => {
       </tr>
     );
 
-    // Handle row selection
     const handleRowSelect = (id) => {
       const newSet = new Set(selectedRows);
       if (newSet.has(id)) {
@@ -1683,8 +1454,7 @@ const NewImport = () => {
 
     return (
       <div className="space-y-4">
-        {/* Import/Export Toolbar */}
-        <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg border" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg border" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
           <div className="flex items-center gap-2">
             <UploadCloud className="w-4 h-4" style={{ color: colors.primary }} />
             <input
@@ -1730,7 +1500,6 @@ const NewImport = () => {
           </span>
         </div>
 
-        {/* Bulk Action Bar */}
         <BulkActionBar 
           selectedCount={selectedRows.size}
           onDelete={bulkDeleteItems}
@@ -1739,7 +1508,6 @@ const NewImport = () => {
           onClear={() => setSelectedRows(new Set())}
         />
 
-        {/* Odoo-style Table */}
         <OdooTable
           items={importData.items}
           columns={allColumns}
@@ -1757,7 +1525,6 @@ const NewImport = () => {
           onSelectAll={handleSelectAll}
         />
 
-        {/* Add Column Modal */}
         {showAddColumnModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className={`relative w-full max-w-md rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
@@ -1831,334 +1598,1115 @@ const NewImport = () => {
     );
   };
 
-  // Render Items Review Step
-  const renderItemsReviewStep = () => {
-    const filteredItems = importData.items.filter(item => {
-      const matchesSearch = item.itemName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.itemCode?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterStatus === 'all' || item.status === filterStatus;
-      return matchesSearch && matchesFilter;
-    });
+  // Replace the renderItemsReviewStep function with this updated version:
 
-    const reviewColumns = [
-      { key: 'itemCode', label: 'Item Code', type: 'text', placeholder: 'e.g., ITEM-001' },
-      { key: 'itemName', label: 'Item Name', type: 'text', placeholder: 'e.g., Laptop Computer' },
-      { key: 'itemGroup', label: 'Item Group', type: 'text', placeholder: 'e.g., Electronics' },
-      { key: 'quantity', label: 'Qty', type: 'number', placeholder: 'e.g., 10' },
-      { key: 'unitPrice', label: 'Unit Price (UGX)', type: 'number', placeholder: 'e.g., 1200000' },
-      { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false },
-    ];
+// Render Items Review & Suppliers Step (Combined)
+const renderItemsReviewStep = () => {
 
-    const allReviewColumns = [...reviewColumns, ...customColumns.map(col => ({
-      ...col,
-      label: col.name,
-      type: col.type,
-      editable: true,
-      removable: true
-    }))];
+  const filteredItems = importData.items.filter(item => {
+    const matchesSearch = item.itemName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.itemCode?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || item.status === filterStatus;
+    const matchesSupplier = filterSupplier === 'all' || item.supplierId === filterSupplier;
+    return matchesSearch && matchesFilter && matchesSupplier;
+  });
 
-    // Handle row selection for review step
-    const handleRowSelectReview = (id) => {
-      const newSet = new Set(selectedRows);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      setSelectedRows(newSet);
-    };
-
-    const handleSelectAllReview = () => {
-      if (selectedRows.size === filteredItems.length) {
-        setSelectedRows(new Set());
-      } else {
-        setSelectedRows(new Set(filteredItems.map(item => item.id)));
-      }
-    };
-
-    return (
-      <div>
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search items..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-            />
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-              isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-            }`}
-            style={{ focusRingColor: colors.primary }}
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="available">Available</option>
-            <option value="unavailable">Unavailable</option>
-            <option value="partial">Partial</option>
-          </select>
-        </div>
-
-        {/* Bulk Action Bar for Review Step */}
-        <BulkActionBar 
-          selectedCount={selectedRows.size}
-          onDelete={bulkDeleteItems}
-          onDuplicate={bulkDuplicateItems}
-          onExport={bulkExportItems}
-          onClear={() => setSelectedRows(new Set())}
-        />
-
-        <OdooTable
-          items={filteredItems}
-          columns={allReviewColumns}
-          onCellEdit={updateItemField}
-          onRowDelete={removeItem}
-          onRowAdd={addRow}
-          showCheckboxes={true}
-          footer={null}
-          actions={[]}
-          showAddRow={true}
-          selectedRows={selectedRows}
-          onRowSelect={handleRowSelectReview}
-          onSelectAll={handleSelectAllReview}
-        />
-      </div>
+  // Get filtered suppliers based on search
+  const getFilteredSuppliers = (search) => {
+    if (!search) return SYSTEM_SUPPLIERS;
+    const lowerSearch = search.toLowerCase();
+    return SYSTEM_SUPPLIERS.filter(s => 
+      s.name.toLowerCase().includes(lowerSearch) || 
+      s.email.toLowerCase().includes(lowerSearch) ||
+      s.id.toLowerCase().includes(lowerSearch)
     );
   };
 
-  // Render Send to Supplier Step
-  const renderSendToSupplierStep = () => (
-    <div className="space-y-6">
-      <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-        <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Send Item List to Supplier
-        </h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Select System Supplier
-            </label>
-            <select
-              value={selectedSupplier}
-              onChange={(e) => {
-                setSelectedSupplier(e.target.value);
-                const supplier = SYSTEM_SUPPLIERS.find(s => s.id === e.target.value);
-                if (supplier) {
-                  setSupplierEmail(supplier.email);
-                  setSupplierName(supplier.name);
-                }
-              }}
-              className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              style={{ focusRingColor: colors.primary }}
-            >
-              <option value="">Select a supplier...</option>
-              {SYSTEM_SUPPLIERS.map(supplier => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name} - {supplier.email}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className={`w-full border-t ${isDark ? 'border-gray-600' : 'border-gray-300'}`}></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className={`px-2 ${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
-                OR
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Send to External Supplier
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Supplier Name"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-              <input
-                type="email"
-                placeholder="Supplier Email"
-                value={supplierEmail}
-                onChange={(e) => setSupplierEmail(e.target.value)}
-                className={`px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
-                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                style={{ focusRingColor: colors.primary }}
-              />
-            </div>
-          </div>
-
+  const reviewColumns = [
+    { key: 'itemCode', label: 'Item Code', type: 'text', placeholder: 'e.g., ITEM-001' },
+    { key: 'itemName', label: 'Item Name', type: 'text', placeholder: 'e.g., Laptop Computer' },
+    { key: 'itemGroup', label: 'Item Group', type: 'text', placeholder: 'e.g., Electronics' },
+    { key: 'quantity', label: 'Qty', type: 'number', placeholder: 'e.g., 10' },
+    { key: 'unitPrice', label: 'Unit Price (UGX)', type: 'number', placeholder: 'e.g., 1200000' },
+    { key: 'totalValue', label: 'Total (UGX)', type: 'number', placeholder: 'Auto-calculated', editable: false },
+    { 
+      key: 'supplierName', 
+      label: 'Supplier', 
+      type: 'text', 
+      editable: false,
+      render: (item) => (
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleSendToSupplier}
-            disabled={!selectedSupplier && !supplierEmail}
-            className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg disabled:opacity-50"
+            onClick={() => {
+              setSelectedItemForSupplier(item);
+              setSupplierModalSearch('');
+              setShowSupplierAssignmentModal(true);
+            }}
+            className={`px-2 py-1 rounded text-xs font-medium transition-all duration-200 hover:shadow-md flex items-center gap-1 ${
+              item.supplierName 
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+            }`}
+          >
+            {item.supplierName ? (
+              <>
+                <Check className="w-3 h-3" />
+                {item.supplierName}
+              </>
+            ) : (
+              <>
+                <Plus className="w-3 h-3" />
+                Assign Supplier
+              </>
+            )}
+          </button>
+          {item.supplierName && (
+            <button
+              onClick={() => {
+                setSelectedItemForSupplier(item);
+                setSupplierModalSearch('');
+                setShowSupplierAssignmentModal(true);
+              }}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600"
+              title="Change supplier"
+            >
+              <Edit2 className="w-3 h-3 text-blue-500" />
+            </button>
+          )}
+        </div>
+      )
+    },
+  ];
+
+  const allReviewColumns = [...reviewColumns, ...customColumns.map(col => ({
+    ...col,
+    label: col.name,
+    type: col.type,
+    editable: true,
+    removable: true
+  }))];
+
+  const handleRowSelectReview = (id) => {
+    const newSet = new Set(selectedRows);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedRows(newSet);
+  };
+
+  const handleSelectAllReview = () => {
+    if (selectedRows.size === filteredItems.length) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(filteredItems.map(item => item.id)));
+    }
+  };
+
+  // Handle supplier assignment from modal
+  const handleAssignSupplierFromModal = (supplierId) => {
+    if (!selectedItemForSupplier) return;
+    if (supplierId) {
+      const supplier = SYSTEM_SUPPLIERS.find(s => s.id === supplierId);
+      if (supplier) {
+        setImportData(prev => ({
+          ...prev,
+          items: prev.items.map(item =>
+            item.id === selectedItemForSupplier.id ? {
+              ...item,
+              supplierId: supplier.id,
+              supplierName: supplier.name,
+              supplierEmail: supplier.email
+            } : item
+          )
+        }));
+        showToast(`Supplier ${supplier.name} assigned to item`, 'success');
+      }
+    } else {
+      // Clear supplier
+      setImportData(prev => ({
+        ...prev,
+        items: prev.items.map(item =>
+          item.id === selectedItemForSupplier.id ? {
+            ...item,
+            supplierId: '',
+            supplierName: '',
+            supplierEmail: ''
+          } : item
+        )
+      }));
+      showToast('Supplier removed from item', 'info');
+    }
+    setShowSupplierAssignmentModal(false);
+    setSelectedItemForSupplier(null);
+    setSupplierModalSearch('');
+  };
+
+  // Handle creating a new supplier from modal
+  const handleCreateSupplierFromModal = () => {
+    if (!newSupplierData.name || !newSupplierData.email) {
+      showToast('Please enter at least name and email', 'error');
+      return;
+    }
+    
+    const newSupplier = {
+      id: `SUP-${String(SYSTEM_SUPPLIERS.length + 1).padStart(3, '0')}`,
+      name: newSupplierData.name,
+      email: newSupplierData.email,
+      phone: newSupplierData.phone || '',
+      contactPerson: newSupplierData.contactPerson || '',
+      address: newSupplierData.address || '',
+      tinNumber: newSupplierData.tinNumber || '',
+    };
+    
+    SYSTEM_SUPPLIERS.push(newSupplier);
+    setNewSupplierData({
+      name: '',
+      email: '',
+      phone: '',
+      contactPerson: '',
+      address: '',
+      tinNumber: '',
+    });
+    
+    // Auto-assign the new supplier to the current item
+    if (selectedItemForSupplier) {
+      setImportData(prev => ({
+        ...prev,
+        items: prev.items.map(item =>
+          item.id === selectedItemForSupplier.id ? {
+            ...item,
+            supplierId: newSupplier.id,
+            supplierName: newSupplier.name,
+            supplierEmail: newSupplier.email
+          } : item
+        )
+      }));
+      showToast(`Supplier ${newSupplier.name} created and assigned!`, 'success');
+      setShowSupplierAssignmentModal(false);
+      setSelectedItemForSupplier(null);
+      setSupplierModalSearch('');
+    } else {
+      showToast(`Supplier ${newSupplier.name} created successfully!`, 'success');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`w-full pl-10 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+              isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+            }`}
+            style={{ focusRingColor: colors.primary }}
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+            isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+          }`}
+          style={{ focusRingColor: colors.primary }}
+        >
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="available">Available</option>
+          <option value="unavailable">Unavailable</option>
+          <option value="partial">Partial</option>
+        </select>
+        <select
+          value={filterSupplier}
+          onChange={(e) => setFilterSupplier(e.target.value)}
+          className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+            isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+          }`}
+          style={{ focusRingColor: colors.primary }}
+        >
+          <option value="all">All Suppliers</option>
+          {SYSTEM_SUPPLIERS.map(s => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <BulkActionBar 
+        selectedCount={selectedRows.size}
+        onDelete={bulkDeleteItems}
+        onDuplicate={bulkDuplicateItems}
+        onExport={bulkExportItems}
+        onClear={() => setSelectedRows(new Set())}
+      />
+
+      <OdooTable
+        items={filteredItems}
+        columns={allReviewColumns}
+        onCellEdit={updateItemField}
+        onRowDelete={removeItem}
+        onRowAdd={addRow}
+        showCheckboxes={true}
+        footer={null}
+        actions={[
+          {
+            label: 'Send to Supplier',
+            icon: <Send className="w-3 h-3" />,
+            onClick: (item) => {
+              if (!item.supplierId) {
+                showToast('Please assign a supplier first', 'error');
+                return;
+              }
+              setImportData(prev => ({
+                ...prev,
+                items: prev.items.map(i =>
+                  i.id === item.id ? { ...i, sentToSupplier: true, sentAt: new Date().toISOString() } : i
+                )
+              }));
+              showToast(`Item ${item.itemCode} sent to ${item.supplierName}`, 'success');
+            }
+          }
+        ]}
+        showAddRow={true}
+        selectedRows={selectedRows}
+        onRowSelect={handleRowSelectReview}
+        onSelectAll={handleSelectAllReview}
+      />
+
+      {/* Send All to Suppliers Button */}
+      {importData.items.some(item => item.supplierId && !item.sentToSupplier) && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleSendToSuppliers}
+            className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
             style={{ backgroundColor: colors.primary }}
           >
             <Send className="w-4 h-4" />
-            Send to Supplier
+            Send All to Suppliers
           </button>
         </div>
-      </div>
+      )}
 
       {orderStatus === 'sent' && (
-        <div className={`p-6 rounded-lg border-2 ${isDark ? 'border-green-700 bg-green-900/20' : 'border-green-500 bg-green-50'}`}>
+        <div className={`p-4 rounded-lg border-2 ${isDark ? 'border-green-700 bg-green-900/20' : 'border-green-500 bg-green-50'}`}>
           <div className="flex items-center gap-3">
-            <CheckCircle className="w-8 h-8 text-green-500" />
+            <CheckCircle className="w-6 h-6 text-green-500" />
             <div>
               <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Items Sent Successfully!
+                All Items Sent to Suppliers!
               </h4>
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {importData.items.length} items sent to {supplierName || 'supplier'} at {supplierEmail}
+                {importData.items.length} item(s) sent. Waiting for supplier confirmations.
               </p>
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                Waiting for supplier confirmation...
-              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Assignment Modal */}
+      {showSupplierAssignmentModal && selectedItemForSupplier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className={`relative w-full max-w-lg rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Assign Supplier - {selectedItemForSupplier.itemName || 'Item'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowSupplierAssignmentModal(false);
+                  setSelectedItemForSupplier(null);
+                  setSupplierModalSearch('');
+                }}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {/* Search input */}
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Search Suppliers
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={supplierModalSearch}
+                    onChange={(e) => setSupplierModalSearch(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                  />
+                </div>
+
+                {/* Supplier list */}
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {getFilteredSuppliers(supplierModalSearch).map(supplier => (
+                    <button
+                      key={supplier.id}
+                      onClick={() => handleAssignSupplierFromModal(supplier.id)}
+                      className={`w-full px-3 py-2 rounded-lg text-left transition-colors flex items-center justify-between ${
+                        selectedItemForSupplier.supplierId === supplier.id
+                          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <div>
+                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {supplier.name}
+                        </div>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {supplier.email} {supplier.phone && `• ${supplier.phone}`}
+                        </div>
+                      </div>
+                      {selectedItemForSupplier.supplierId === supplier.id && (
+                        <Check className="w-4 h-4 text-green-500" />
+                      )}
+                    </button>
+                  ))}
+
+                  {getFilteredSuppliers(supplierModalSearch).length === 0 && (
+                    <div className="text-center py-4">
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        No suppliers found
+                      </p>
+                      <button
+                        onClick={() => {
+                          setNewSupplierData({
+                            name: '',
+                            email: '',
+                            phone: '',
+                            contactPerson: '',
+                            address: '',
+                            tinNumber: '',
+                          });
+                          setShowNewSupplierModal(true);
+                        }}
+                        className="mt-2 text-sm font-medium hover:underline inline-flex items-center gap-1"
+                        style={{ color: colors.primary }}
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Create New Supplier
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Current supplier info */}
+                {selectedItemForSupplier.supplierName && (
+                  <div className={`mt-2 p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Current Supplier:
+                    </p>
+                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      {selectedItemForSupplier.supplierName}
+                    </p>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {selectedItemForSupplier.supplierEmail}
+                    </p>
+                    <button
+                      onClick={() => handleAssignSupplierFromModal(null)}
+                      className="mt-2 text-sm text-red-500 hover:underline"
+                    >
+                      Remove Supplier
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowSupplierAssignmentModal(false);
+                  setSelectedItemForSupplier(null);
+                  setSupplierModalSearch('');
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setNewSupplierData({
+                    name: '',
+                    email: '',
+                    phone: '',
+                    contactPerson: '',
+                    address: '',
+                    tinNumber: '',
+                  });
+                  setShowNewSupplierModal(true);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md flex items-center gap-2"
+                style={{ backgroundColor: colors.info }}
+              >
+                <UserPlus className="w-4 h-4" />
+                New Supplier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Supplier Modal - Triggered from assignment modal */}
+      {showNewSupplierModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className={`relative w-full max-w-lg rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Add New Supplier
+              </h3>
+              <button
+                onClick={() => setShowNewSupplierModal(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Supplier Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSupplierData.name}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, name: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="Enter supplier name"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={newSupplierData.email}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, email: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="supplier@email.com"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={newSupplierData.phone}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, phone: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="+256 700 000 000"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Contact Person
+                  </label>
+                  <input
+                    type="text"
+                    value={newSupplierData.contactPerson}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, contactPerson: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="Contact person name"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Address
+                  </label>
+                  <input
+                    type="text"
+                    value={newSupplierData.address}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, address: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="Supplier address"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    TIN Number
+                  </label>
+                  <input
+                    type="text"
+                    value={newSupplierData.tinNumber}
+                    onChange={(e) => setNewSupplierData({ ...newSupplierData, tinNumber: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="TIN number"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button
+                onClick={() => {
+                  setShowNewSupplierModal(false);
+                  // Re-open the assignment modal if we had an item selected
+                  if (selectedItemForSupplier) {
+                    setShowSupplierAssignmentModal(true);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSupplierFromModal}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                style={{ backgroundColor: colors.primary }}
+              >
+                Create & Assign Supplier
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
   );
+};
 
-  // Render Supplier Confirmation Step
+
+  // Render Supplier Confirmation Step (View Only)
   const renderSupplierConfirmationStep = () => {
+    const hasSentItems = importData.items.some(item => item.sentToSupplier);
+    const allConfirmed = importData.items.every(item => {
+      const response = MOCK_SUPPLIER_RESPONSES[item.supplierId];
+      return response && response.status === 'approved';
+    });
+
     const confirmationColumns = [
       { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
       { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
       { key: 'quantity', label: 'Requested Qty', type: 'text', editable: false },
-      { key: 'supplierQuantity', label: 'Available Qty', type: 'number', placeholder: 'e.g., 5' },
-      { key: 'supplierStatus', label: 'Status', type: 'text', editable: false },
-      { key: 'supplierNotes', label: 'Notes', type: 'text', placeholder: 'Supplier notes...' },
+      { key: 'supplierName', label: 'Supplier', type: 'text', editable: false },
+      { 
+        key: 'supplierResponse', 
+        label: 'Response', 
+        type: 'text', 
+        editable: false,
+        render: (item) => {
+          const response = MOCK_SUPPLIER_RESPONSES[item.supplierId];
+          if (!response) return <span className="text-sm text-gray-400">Not sent yet</span>;
+          const statusColor = response.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                             response.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                             'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+          return (
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                {response.status}
+              </span>
+              <button
+                onClick={() => viewSupplierResponse(item.id)}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600"
+                title="View response details"
+              >
+                <Eye className="w-3 h-3 text-blue-500" />
+              </button>
+            </div>
+          );
+        }
+      },
+      { 
+        key: 'respondedAt', 
+        label: 'Responded At', 
+        type: 'text', 
+        editable: false,
+        render: (item) => {
+          const response = MOCK_SUPPLIER_RESPONSES[item.supplierId];
+          return <span className="text-sm">{response?.respondedAt || '-'}</span>;
+        }
+      },
     ];
 
-    const allConfirmationColumns = [...confirmationColumns, ...customColumns.map(col => ({
-      ...col,
-      label: col.name,
-      type: col.type,
-      editable: false
-    }))];
+    return (
+      <div className="space-y-6">
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Supplier Confirmations
+            </h3>
+            {allConfirmed && orderStatus === 'sent' && (
+              <span className={`px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400`}>
+                All Confirmed ✓
+              </span>
+            )}
+          </div>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            View supplier responses for each item. You can approve or reject supplier confirmations.
+          </p>
+
+          {!hasSentItems ? (
+            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <Send className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm font-medium">No items sent to suppliers yet</p>
+              <p className="text-xs mt-1">Go to Items Review step to send items to suppliers</p>
+            </div>
+          ) : (
+            <>
+              <OdooTable
+                items={importData.items}
+                columns={confirmationColumns}
+                onCellEdit={null}
+                onRowDelete={null}
+                showCheckboxes={false}
+                footer={null}
+                actions={[
+                  {
+                    label: 'View Response',
+                    icon: <Eye className="w-3 h-3 text-blue-500" />,
+                    onClick: (item) => viewSupplierResponse(item.id)
+                  },
+                  {
+                    label: 'Confirm Item',
+                    icon: <CheckCircle className="w-3 h-3 text-green-500" />,
+                    onClick: (item) => {
+                      const response = MOCK_SUPPLIER_RESPONSES[item.supplierId];
+                      if (response && response.status === 'approved') {
+                        updateItemField(item.id, 'status', 'confirmed');
+                        showToast(`Item ${item.itemCode} confirmed by supplier`, 'success');
+                        // Check if all items are confirmed
+                        const allConfirmedNow = importData.items.every(i => 
+                          i.id === item.id ? true : i.status === 'confirmed'
+                        );
+                        if (allConfirmedNow) {
+                          setOrderStatus('confirmed');
+                          showToast('All items confirmed by suppliers! Proceed to Invoice & Payment.', 'success');
+                        }
+                      } else {
+                        showToast('Supplier has not approved this item yet', 'error');
+                      }
+                    }
+                  },
+                  {
+                    label: 'Reject',
+                    icon: <X className="w-3 h-3 text-red-500" />,
+                    onClick: (item) => {
+                      if (window.confirm(`Are you sure you want to reject this item?`)) {
+                        updateItemField(item.id, 'status', 'rejected');
+                        showToast(`Item ${item.itemCode} rejected. Find new supplier.`, 'info');
+                      }
+                    }
+                  }
+                ]}
+                showAddRow={false}
+                selectedRows={new Set()}
+                onRowSelect={() => {}}
+                onSelectAll={() => {}}
+              />
+
+              {/* Rejected items - option to find new supplier */}
+              {importData.items.some(item => item.status === 'rejected') && (
+                <div className={`mt-4 p-4 rounded-lg border-2 ${isDark ? 'border-red-700 bg-red-900/20' : 'border-red-500 bg-red-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-6 h-6 text-red-500" />
+                    <div>
+                      <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        Some items were rejected by suppliers
+                      </h4>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Please go back to Items Review step and assign new suppliers for rejected items.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setCurrentStep(1)}
+                      className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Find New Supplier
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {allConfirmed && orderStatus === 'sent' && (
+                <div className={`mt-4 p-4 rounded-lg border-2 ${isDark ? 'border-green-700 bg-green-900/20' : 'border-green-500 bg-green-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="w-6 h-6 text-green-500" />
+                    <div className="flex-1">
+                      <h4 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        All Items Confirmed!
+                      </h4>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        All suppliers have confirmed. You can now proceed to Invoice & Payment.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setCurrentStep(3)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      Proceed to Invoice
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Render Invoice & Payment Step (Updated)
+  const renderInvoicePaymentStep = () => {
+    const totalItemsValue = getTotalItemsValue();
+    const taxAmount = totalItemsValue * 0.18;
+    const shippingCost = totalItemsValue * 0.05;
+    const totalAmount = totalItemsValue + taxAmount + shippingCost;
 
     return (
       <div className="space-y-6">
         <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
           <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Supplier Confirmation Status
+            Invoice Summary
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
+              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Subtotal</p>
+              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {formatCurrency(totalItemsValue)}
+              </p>
+            </div>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
+              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tax (18%)</p>
+              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {formatCurrency(taxAmount)}
+              </p>
+            </div>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
+              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Shipping</p>
+              <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {formatCurrency(shippingCost)}
+              </p>
+            </div>
+            <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-600' : 'bg-white'}`} style={{ borderLeft: `4px solid ${colors.primary}` }}>
+              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p>
+              <p className={`text-lg font-bold`} style={{ color: colors.primary }}>
+                {formatCurrency(totalAmount)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Invoice Details (View Only)
           </h3>
           <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Review supplier's response for each item
+            Review supplier invoice. You can download the attached invoice document.
           </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Invoice Number
+              </label>
+              <input
+                type="text"
+                value={invoiceData.invoiceNumber}
+                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+                placeholder="e.g., INV-2024-001"
+              />
+            </div>
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Supplier Invoice Number
+              </label>
+              <input
+                type="text"
+                value={invoiceData.supplierInvoiceNumber}
+                onChange={(e) => setInvoiceData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
+                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+                placeholder="Supplier's invoice number"
+              />
+            </div>
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Invoice Date
+              </label>
+              <input
+                type="date"
+                value={invoiceData.invoiceDate}
+                onChange={(e) => setInvoiceData(prev => ({ ...prev, invoiceDate: e.target.value }))}
+                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+              />
+            </div>
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                Due Date
+              </label>
+              <input
+                type="date"
+                value={invoiceData.dueDate}
+                onChange={(e) => setInvoiceData(prev => ({ ...prev, dueDate: e.target.value }))}
+                className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 ${
+                  isDark ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                style={{ focusRingColor: colors.primary }}
+              />
+            </div>
+          </div>
 
-          <OdooTable
-            items={importData.items}
-            columns={allConfirmationColumns}
-            onCellEdit={updateItemField}
-            onRowDelete={null}
-            showCheckboxes={true}
-            footer={null}
-            actions={[
-              {
-                label: 'Update Status',
-                icon: <Edit2 className="w-3 h-3" />,
-                onClick: (item) => {
-                  const status = prompt('Enter status (available/unavailable/partial):', item.supplierStatus || 'pending');
-                  if (status && ['available', 'unavailable', 'partial', 'pending'].includes(status)) {
-                    handleSupplierConfirmation(item.id, status, item.supplierNotes, item.supplierQuantity);
-                  }
-                }
-              }
-            ]}
-            showAddRow={false}
-            selectedRows={new Set()}
-            onRowSelect={() => {}}
-            onSelectAll={() => {}}
-          />
-
-          {orderStatus === 'confirmed' && (
-            <div className="mt-6 flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-              <CheckCircle className="w-8 h-8 text-green-500" />
-              <div className="flex-1">
-                <h4 className="font-semibold text-green-700 dark:text-green-400">All Items Confirmed!</h4>
-                <p className="text-sm text-green-600 dark:text-green-300">
-                  Supplier has reviewed all items. You can now proceed to order finalisation.
+          {/* Invoice Document - Download Only */}
+          <div className={`mt-4 p-4 rounded-lg border-2 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Invoice Document
+                </p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {(invoiceData.uploadedDocuments || []).length} document(s)
                 </p>
               </div>
               <button
-                onClick={handleConfirmOrder}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                onClick={() => document.getElementById('invoiceUpload').click()}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
                 style={{ backgroundColor: colors.primary }}
               >
-                Finalize Order
+                <Download className="w-4 h-4" />
+                Download All
               </button>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                className="hidden"
+                id="invoiceUpload"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    handleInvoiceUpload(file);
+                  }
+                  e.target.value = '';
+                }}
+              />
             </div>
-          )}
-        </div>
-
-        {showConfirmModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className={`relative w-full max-w-md rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-              <div className={`p-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Confirm Order
-                </h3>
-              </div>
-              <div className="p-6">
-                <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Are you sure you want to finalize this order? This action cannot be undone.
-                </p>
-                <div className="mt-4 flex items-center gap-2">
-                  <input type="checkbox" id="confirmCheck" className="rounded border-gray-300" />
-                  <label htmlFor="confirmCheck" className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    I confirm that all items have been reviewed and approved
-                  </label>
+            {(invoiceData.uploadedDocuments || []).map((doc) => (
+              <div key={doc.id} className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-50'} flex items-center justify-between`}>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {getFileIcon(doc.type)}
+                  <span className="text-sm truncate">{doc.name}</span>
+                  <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(doc.size)}</span>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      setViewingDocument(doc);
+                      setShowDocumentViewer(true);
+                    }}
+                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <Eye className="w-3 h-3 text-blue-500" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = doc.data;
+                      link.download = doc.name;
+                      link.click();
+                    }}
+                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <Download className="w-3 h-3 text-green-500" />
+                  </button>
                 </div>
               </div>
-              <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <button
-                  onClick={() => setShowConfirmModal(false)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={finalizeOrder}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  Confirm & Finalize
-                </button>
-              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Payment Section */}
+        <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Payment Details
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                invoiceData.paymentStatus === 'paid' 
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : invoiceData.paymentStatus === 'partially_paid'
+                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
+              }`}>
+                {invoiceData.paymentStatus.charAt(0).toUpperCase() + invoiceData.paymentStatus.slice(1)}
+              </span>
+              {invoiceData.supplierConfirmedPayment && (
+                <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  ✓ Supplier Confirmed
+                </span>
+              )}
             </div>
           </div>
-        )}
+
+          <button
+            onClick={addPayment}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md mb-4"
+            style={{ backgroundColor: colors.primary }}
+          >
+            <Plus className="w-4 h-4" />
+            Add Payment
+          </button>
+
+          {(invoiceData.payments || []).map((payment, index) => (
+            <div key={payment.id} className={`p-4 rounded-lg mb-3 ${isDark ? 'bg-gray-600' : 'bg-white'}`}>
+              <div className="flex justify-between items-center mb-2">
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Payment #{index + 1}
+                </span>
+                <button
+                  onClick={() => removePayment(index)}
+                  className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={payment.paymentDate}
+                    onChange={(e) => updatePayment(index, 'paymentDate', e.target.value)}
+                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Amount (UGX)
+                  </label>
+                  <input
+                    type="number"
+                    value={payment.amount}
+                    onChange={(e) => updatePayment(index, 'amount', e.target.value)}
+                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Payment Method
+                  </label>
+                  <select
+                    value={payment.method}
+                    onChange={(e) => updatePayment(index, 'method', e.target.value)}
+                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                  >
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="wire_transfer">Wire Transfer</option>
+                    <option value="letter_of_credit">Letter of Credit</option>
+                    <option value="cash">Cash</option>
+                    <option value="mobile_money">Mobile Money</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Reference Number
+                  </label>
+                  <input
+                    type="text"
+                    value={payment.reference}
+                    onChange={(e) => updatePayment(index, 'reference', e.target.value)}
+                    className={`w-full px-3 py-1.5 rounded border text-sm focus:outline-none focus:ring-2 ${
+                      isDark ? 'bg-gray-500 border-gray-400 text-white' : 'bg-white border-gray-300 text-gray-900'
+                    }`}
+                    style={{ focusRingColor: colors.primary }}
+                    placeholder="Reference number"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-3 mt-4">
+            {(invoiceData.payments || []).length > 0 && invoiceData.paymentStatus !== 'paid' && (
+              <button
+                onClick={markAsPaid}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                style={{ backgroundColor: colors.success }}
+              >
+                <CheckCircle className="w-4 h-4" />
+                Mark as Paid
+              </button>
+            )}
+
+            {invoiceData.paymentStatus === 'paid' && !invoiceData.supplierConfirmedPayment && (
+              <button
+                onClick={confirmPaymentReceived}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                style={{ backgroundColor: colors.info }}
+              >
+                <CheckCircle className="w-4 h-4" />
+                Confirm Payment Received (Supplier)
+              </button>
+            )}
+
+            {invoiceData.supplierConfirmedPayment && orderStatus !== 'finalized' && (
+              <button
+                onClick={() => setCurrentStep(4)}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <FileSignature className="w-4 h-4" />
+                Proceed to Finalisation
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
 
-  // Render Order Finalisation Step
+  // Render Order Finalisation Step (Updated with Commercial Invoice)
   const renderOrderFinalisationStep = () => {
     const getDocCount = (item, type) => {
       if (!item || !item[type]) return 0;
@@ -2170,63 +2718,121 @@ const NewImport = () => {
       return item[type].status || 'pending';
     };
 
-    const finalisationColumns = [
-      { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
-      { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
-      { 
-        key: 'pvocStatus', 
-        label: 'PVoC Status', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(getStatus(item, 'pvoc'))}`}>
-            {getStatus(item, 'pvoc').charAt(0).toUpperCase() + getStatus(item, 'pvoc').slice(1)}
-          </span>
-        )
-      },
-      { 
-        key: 'pvocDocs', 
-        label: 'PVoC Docs', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className="text-sm">
-            {getDocCount(item, 'pvoc')} document(s)
-          </span>
-        )
-      },
-      { 
-        key: 'cocStatus', 
-        label: 'CoC Status', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(getStatus(item, 'coc'))}`}>
-            {getStatus(item, 'coc').charAt(0).toUpperCase() + getStatus(item, 'coc').slice(1)}
-          </span>
-        )
-      },
-      { 
-        key: 'cocDocs', 
-        label: 'CoC Docs', 
-        type: 'text', 
-        editable: false,
-        render: (item) => (
-          <span className="text-sm">
-            {getDocCount(item, 'coc')} document(s)
-          </span>
-        )
-      },
-    ];
+    // Update the finalisationColumns in renderOrderFinalisationStep:
+
+const finalisationColumns = [
+  { key: 'itemCode', label: 'Item Code', type: 'text', editable: false },
+  { key: 'itemName', label: 'Item Name', type: 'text', editable: false },
+  { 
+    key: 'commercialInvoice', 
+    label: 'Commercial Invoice', 
+    type: 'text', 
+    editable: false,
+    render: (item) => {
+      const hasInvoice = item.commercialInvoice?.document;
+      return (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setActiveCommercialInvoiceItem(item.id);
+              setShowCommercialInvoiceModal(true);
+            }}
+            className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 ${
+              hasInvoice ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+            }`}
+          >
+            {hasInvoice ? (
+              <>
+                <CheckCircle className="w-3 h-3" />
+                Uploaded
+              </>
+            ) : (
+              <>
+                <Upload className="w-3 h-3" />
+                Pending - Click to upload
+              </>
+            )}
+          </button>
+          {hasInvoice && (
+            <button
+              onClick={() => {
+                setViewingDocument(item.commercialInvoice.document);
+                setShowDocumentViewer(true);
+              }}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-600"
+              title="View document"
+            >
+              <Eye className="w-3 h-3 text-blue-500" />
+            </button>
+          )}
+        </div>
+      );
+    }
+  },
+  { 
+    key: 'pvocStatus', 
+    label: 'PVoC Status', 
+    type: 'text', 
+    editable: false,
+    render: (item) => {
+      const status = getStatus(item, 'pvoc');
+      const hasDocs = (item.pvoc?.uploadedDocuments || []).length > 0;
+      return (
+        <button
+          onClick={() => {
+            setActivePVoCItem(item.id);
+            setShowPVoCModal(true);
+          }}
+          className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 ${getStatusColor(status)}`}
+        >
+          {status === 'approved' ? (
+            <CheckCircle className="w-3 h-3" />
+          ) : status === 'pending' ? (
+            <Upload className="w-3 h-3" />
+          ) : null}
+          {status.charAt(0).toUpperCase() + status.slice(1)}
+          {hasDocs && <span className="ml-1 text-xs">({(item.pvoc?.uploadedDocuments || []).length})</span>}
+        </button>
+      );
+    }
+  },
+  { 
+    key: 'cocStatus', 
+    label: 'CoC Status', 
+    type: 'text', 
+    editable: false,
+    render: (item) => {
+      const status = getStatus(item, 'coc');
+      const hasDocs = (item.coc?.uploadedDocuments || []).length > 0;
+      return (
+        <button
+          onClick={() => {
+            setActiveCoCItem(item.id);
+            setShowCoCModal(true);
+          }}
+          className={`px-2 py-1 rounded-full text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1 ${getStatusColor(status)}`}
+        >
+          {status === 'approved' ? (
+            <CheckCircle className="w-3 h-3" />
+          ) : status === 'pending' ? (
+            <Upload className="w-3 h-3" />
+          ) : null}
+          {status.charAt(0).toUpperCase() + status.slice(1)}
+          {hasDocs && <span className="ml-1 text-xs">({(item.coc?.uploadedDocuments || []).length})</span>}
+        </button>
+      );
+    }
+  },
+];
 
     return (
       <div className="space-y-6">
         <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
           <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            UNBS Documentation
+            Order Finalisation Documents
           </h3>
           <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-            Request and attach UNBS PVoC and CoC documents for each item
+            Upload Commercial Invoice and UNBS PVoC/CoC documents for each item
           </p>
 
           <OdooTable
@@ -2234,9 +2840,17 @@ const NewImport = () => {
             columns={finalisationColumns}
             onCellEdit={null}
             onRowDelete={null}
-            showCheckboxes={true}
+            showCheckboxes={false}
             footer={null}
             actions={[
+              {
+                label: 'Manage Commercial Invoice',
+                icon: <FileText className="w-3 h-3" />,
+                onClick: (item) => {
+                  setActiveCommercialInvoiceItem(item.id);
+                  setShowCommercialInvoiceModal(true);
+                }
+              },
               {
                 label: 'Manage PVoC',
                 icon: <Shield className="w-3 h-3" />,
@@ -2254,10 +2868,13 @@ const NewImport = () => {
                 }
               },
               {
-                label: 'View Documents',
+                label: 'View All Documents',
                 icon: <Eye className="w-3 h-3 text-blue-500" />,
                 onClick: (item) => {
-                  const docs = [...(item.pvoc?.uploadedDocuments || []), ...(item.coc?.uploadedDocuments || [])];
+                  const docs = [];
+                  if (item.commercialInvoice?.document) docs.push({ ...item.commercialInvoice.document, type: 'Commercial Invoice' });
+                  if (item.pvoc?.uploadedDocuments) docs.push(...item.pvoc.uploadedDocuments.map(d => ({ ...d, type: 'PVoC' })));
+                  if (item.coc?.uploadedDocuments) docs.push(...item.coc.uploadedDocuments.map(d => ({ ...d, type: 'CoC' })));
                   if (docs.length > 0) {
                     setViewingDocument(docs[0]);
                     setShowDocumentViewer(true);
@@ -2273,6 +2890,139 @@ const NewImport = () => {
             onSelectAll={() => {}}
           />
         </div>
+
+        {/* Commercial Invoice Modal */}
+        {showCommercialInvoiceModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className={`relative w-full max-w-2xl rounded-xl shadow-2xl ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+              <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Commercial Invoice - {importData.items.find(i => i.id === activeCommercialInvoiceItem)?.itemName || 'Item'}
+                </h3>
+                <button
+                  onClick={() => setShowCommercialInvoiceModal(false)}
+                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                {activeCommercialInvoiceItem && (() => {
+                  const item = importData.items.find(i => i.id === activeCommercialInvoiceItem);
+                  return (
+                    <div className="space-y-4">
+                      <div className={`p-4 rounded-lg border-2 border-dashed ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              Commercial Invoice Document
+                            </p>
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {item?.commercialInvoice?.document ? '1 document uploaded' : 'No document uploaded'}
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                            className="hidden"
+                            id="commercialInvoiceUpload"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file && activeCommercialInvoiceItem) {
+                                handleCommercialInvoiceUpload(activeCommercialInvoiceItem, file);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                          <button
+                            onClick={() => document.getElementById('commercialInvoiceUpload').click()}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                            style={{ backgroundColor: colors.primary }}
+                          >
+                            <Upload className="w-4 h-4" />
+                            {item?.commercialInvoice?.document ? 'Replace' : 'Upload'}
+                          </button>
+                        </div>
+                        {item?.commercialInvoice?.document && (
+                          <div className={`mt-2 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-50'} flex items-center justify-between`}>
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {getFileIcon(item.commercialInvoice.document.type)}
+                              <span className="text-sm truncate">{item.commercialInvoice.document.name}</span>
+                              <span className="text-xs text-gray-500 flex-shrink-0">{formatFileSize(item.commercialInvoice.document.size)}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => {
+                                  setViewingDocument(item.commercialInvoice.document);
+                                  setShowDocumentViewer(true);
+                                  setShowCommercialInvoiceModal(false);
+                                }}
+                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                              >
+                                <Eye className="w-3 h-3 text-blue-500" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = item.commercialInvoice.document.data;
+                                  link.download = item.commercialInvoice.document.name;
+                                  link.click();
+                                }}
+                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                              >
+                                <Download className="w-3 h-3 text-green-500" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setImportData(prev => ({
+                                    ...prev,
+                                    items: prev.items.map(i =>
+                                      i.id === activeCommercialInvoiceItem ? {
+                                        ...i,
+                                        commercialInvoice: {
+                                          ...i.commercialInvoice,
+                                          document: null,
+                                          uploadedAt: null,
+                                          status: 'pending'
+                                        }
+                                      } : i
+                                    )
+                                  }));
+                                  showToast('Commercial Invoice removed', 'info');
+                                }}
+                                className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-500" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className={`flex items-center justify-end gap-3 p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <button
+                  onClick={() => setShowCommercialInvoiceModal(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCommercialInvoiceModal(false);
+                    showToast('Commercial Invoice saved!', 'success');
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-md"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PVoC Modal */}
         {showPVoCModal && (
@@ -2635,7 +3385,7 @@ const NewImport = () => {
     
     if (!hasValidItems) {
       showToast('Please add at least one valid item with name, quantity, and value', 'error');
-      setCurrentStep(1);
+      setCurrentStep(0);
       return;
     }
 
@@ -2644,8 +3394,11 @@ const NewImport = () => {
       status: 'complete',
       importNumber: `IMP-${Date.now().toString().slice(-8)}`,
       completedAt: new Date().toISOString(),
-      progress: 100
+      progress: 100,
+      orderStatus: 'finalized'
     };
+    
+    setOrderStatus('finalized');
     
     const importsList = JSON.parse(localStorage.getItem('allImports') || '[]');
     importsList.push(completedData);
@@ -2681,7 +3434,7 @@ const NewImport = () => {
               Back to Dashboard
             </button>
             <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              New Import Documentation
+              Order Preparation
             </h1>
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
               {importData.items.length} item(s) • {importData.importNumber || 'Draft'} • Status: {getOrderStatusDisplay(orderStatus)}
@@ -2717,59 +3470,27 @@ const NewImport = () => {
 
         {/* Progress Bar with Steps */}
         <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Overall Progress
-            </span>
-            <span className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {importData.progress}%
-            </span>
-          </div>
-          <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="absolute h-full rounded-full transition-all duration-500"
-              style={{ 
-                width: `${importData.progress}%`,
-                background: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryLight}, ${colors.success})`
-              }}
-            />
-          </div>
-          <div className="flex justify-between mt-1">
-            {steps.map((step, index) => {
-              const isActive = index === currentStep;
-              const isCompleted = index < currentStep;
-              return (
-                <button
-                  key={step.id}
-                  onClick={() => {
-                    setCurrentStep(index);
-                    saveProgress();
-                  }}
-                  className={`flex flex-col items-center transition-all duration-200 ${
-                    isActive ? 'scale-110' : ''
-                  }`}
-                >
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-200 ${
-                    isActive 
-                      ? 'text-white shadow-lg' 
-                      : isCompleted 
-                      ? 'text-white' 
-                      : isDark ? 'text-gray-400 bg-gray-600' : 'text-gray-500 bg-gray-200'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? colors.primary : isCompleted ? colors.success : undefined
-                  }}>
-                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
-                  </div>
-                  <span className={`text-xs mt-1 ${isActive ? 'font-bold' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {step.title}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <ProgressBar
+            steps={steps}
+            currentStep={currentStep}
+            onStepClick={(step) => {
+              setCurrentStep(step);
+              saveProgress();
+            }}
+            stepColors={[
+              '#714b67', // Step 1 - Preparation of Goods
+              '#8b5cf6', // Step 2 - Items Review & Suppliers
+              '#3b82f6', // Step 3 - Supplier Confirmation
+              '#f59e0b', // Step 4 - Invoice & Payment
+              '#ef4444', // Step 5 - Order Finalisation
+            ]}
+            theme={isDark ? 'dark' : 'light'}
+            size="sm"
+            showLabels={true}
+            clickable={true}
+          />
         </div>
-
+        
         <div className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${
           isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
         }`}>
@@ -2791,12 +3512,11 @@ const NewImport = () => {
 
           {currentStep === 0 && renderPreparationStep()}
           {currentStep === 1 && renderItemsReviewStep()}
-          {currentStep === 2 && renderSendToSupplierStep()}
-          {currentStep === 3 && renderSupplierConfirmationStep()}
-          {currentStep === 4 && renderInvoicePaymentStep()}
-          {currentStep === 5 && renderOrderFinalisationStep()}
+          {currentStep === 2 && renderSupplierConfirmationStep()}
+          {currentStep === 3 && renderInvoicePaymentStep()}
+          {currentStep === 4 && renderOrderFinalisationStep()}
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-6 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-6 border-t" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
             <button
               onClick={handlePrevious}
               disabled={currentStep === 0}

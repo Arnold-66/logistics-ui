@@ -1,5 +1,5 @@
-// roles/freightforwarder/FreightForwarderBookings.jsx (with alerts card removed)
-import React, { useState, useContext, useEffect, useRef } from 'react';
+// roles/freightforwarder/FreightForwarderBookings.jsx
+import React, { useState, useContext } from 'react';
 import {
   Package,
   Ship,
@@ -112,11 +112,12 @@ import {
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const FreightForwarderBookings = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
+
   const { user } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -162,18 +163,207 @@ const FreightForwarderBookings = () => {
 
   // Color theme
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
+
+  // Helper function to get country flag emoji
+  const getCountryFlag = (countryName) => {
+    const flagMap = {
+      'Liberia': '🇱🇷',
+      'India': '🇮🇳',
+      'South Africa': '🇿🇦',
+      'Panama': '🇵🇦',
+      'Germany': '🇩🇪',
+      'Kenya': '🇰🇪',
+      'Uganda': '🇺🇬',
+      'United Kingdom': '🇬🇧',
+      'USA': '🇺🇸',
+      'China': '🇨🇳',
+      'Japan': '🇯🇵',
+      'Singapore': '🇸🇬',
+      'Malaysia': '🇲🇾',
+      'Indonesia': '🇮🇩',
+      'Thailand': '🇹🇭',
+      'Vietnam': '🇻🇳',
+      'Philippines': '🇵🇭',
+      'Myanmar': '🇲🇲',
+      'Cambodia': '🇰🇭',
+      'Laos': '🇱🇦',
+      'Brunei': '🇧🇳',
+      'Timor-Leste': '🇹🇱',
+      'Maldives': '🇲🇻',
+      'Sri Lanka': '🇱🇰',
+      'Bangladesh': '🇧🇩',
+      'Pakistan': '🇵🇰',
+      'Nepal': '🇳🇵',
+      'Bhutan': '🇧🇹',
+      'Mongolia': '🇲🇳',
+      'North Korea': '🇰🇵',
+      'South Korea': '🇰🇷',
+      'Taiwan': '🇹🇼',
+      'Hong Kong': '🇭🇰',
+      'Macau': '🇲🇴',
+      'Afghanistan': '🇦🇫',
+      'Iran': '🇮🇷',
+      'Iraq': '🇮🇶',
+      'Syria': '🇸🇾',
+      'Lebanon': '🇱🇧',
+      'Jordan': '🇯🇴',
+      'Israel': '🇮🇱',
+      'Palestine': '🇵🇸',
+      'Saudi Arabia': '🇸🇦',
+      'Yemen': '🇾🇪',
+      'Oman': '🇴🇲',
+      'UAE': '🇦🇪',
+      'Qatar': '🇶🇦',
+      'Bahrain': '🇧🇭',
+      'Kuwait': '🇰🇼',
+      'Egypt': '🇪🇬',
+      'Libya': '🇱🇾',
+      'Tunisia': '🇹🇳',
+      'Algeria': '🇩🇿',
+      'Morocco': '🇲🇦',
+      'Mauritania': '🇲🇷',
+      'Senegal': '🇸🇳',
+      'Gambia': '🇬🇲',
+      'Mali': '🇲🇱',
+      'Burkina Faso': '🇧🇫',
+      'Niger': '🇳🇪',
+      'Nigeria': '🇳🇬',
+      'Cameroon': '🇨🇲',
+      'Chad': '🇹🇩',
+      'Sudan': '🇸🇩',
+      'South Sudan': '🇸🇸',
+      'Eritrea': '🇪🇷',
+      'Djibouti': '🇩🇯',
+      'Somalia': '🇸🇴',
+      'Ethiopia': '🇪🇹',
+      'Rwanda': '🇷🇼',
+      'Burundi': '🇧🇮',
+      'Tanzania': '🇹🇿',
+      'Malawi': '🇲🇼',
+      'Zambia': '🇿🇲',
+      'Zimbabwe': '🇿🇼',
+      'Mozambique': '🇲🇿',
+      'Angola': '🇦🇴',
+      'Namibia': '🇳🇦',
+      'Botswana': '🇧🇼',
+      'Lesotho': '🇱🇸',
+      'Eswatini': '🇸🇿',
+      'Madagascar': '🇲🇬',
+      'Comoros': '🇰🇲',
+      'Seychelles': '🇸🇨',
+      'Mauritius': '🇲🇺',
+      'France': '🇫🇷',
+      'Spain': '🇪🇸',
+      'Portugal': '🇵🇹',
+      'Italy': '🇮🇹',
+      'Greece': '🇬🇷',
+      'Turkey': '🇹🇷',
+      'Netherlands': '🇳🇱',
+      'Belgium': '🇧🇪',
+      'Luxembourg': '🇱🇺',
+      'Switzerland': '🇨🇭',
+      'Austria': '🇦🇹',
+      'Czech Republic': '🇨🇿',
+      'Slovakia': '🇸🇰',
+      'Hungary': '🇭🇺',
+      'Slovenia': '🇸🇮',
+      'Croatia': '🇭🇷',
+      'Bosnia': '🇧🇦',
+      'Serbia': '🇷🇸',
+      'Montenegro': '🇲🇪',
+      'Kosovo': '🇽🇰',
+      'Albania': '🇦🇱',
+      'Macedonia': '🇲🇰',
+      'Romania': '🇷🇴',
+      'Bulgaria': '🇧🇬',
+      'Moldova': '🇲🇩',
+      'Ukraine': '🇺🇦',
+      'Belarus': '🇧🇾',
+      'Russia': '🇷🇺',
+      'Poland': '🇵🇱',
+      'Lithuania': '🇱🇹',
+      'Latvia': '🇱🇻',
+      'Estonia': '🇪🇪',
+      'Finland': '🇫🇮',
+      'Sweden': '🇸🇪',
+      'Norway': '🇳🇴',
+      'Denmark': '🇩🇰',
+      'Iceland': '🇮🇸',
+      'Ireland': '🇮🇪',
+      'Australia': '🇦🇺',
+      'New Zealand': '🇳🇿',
+      'Papua New Guinea': '🇵🇬',
+      'Fiji': '🇫🇯',
+      'Samoa': '🇼🇸',
+      'Tonga': '🇹🇴',
+      'Kiribati': '🇰🇮',
+      'Marshall Islands': '🇲🇭',
+      'Palau': '🇵🇼',
+      'Nauru': '🇳🇷',
+      'Tuvalu': '🇹🇻',
+      'Vanuatu': '🇻🇺',
+      'Solomon Islands': '🇸🇧',
+      'Canada': '🇨🇦',
+      'Mexico': '🇲🇽',
+      'Brazil': '🇧🇷',
+      'Argentina': '🇦🇷',
+      'Uruguay': '🇺🇾',
+      'Paraguay': '🇵🇾',
+      'Bolivia': '🇧🇴',
+      'Peru': '🇵🇪',
+      'Ecuador': '🇪🇨',
+      'Colombia': '🇨🇴',
+      'Venezuela': '🇻🇪',
+      'Guyana': '🇬🇾',
+      'Suriname': '🇸🇷',
+      'French Guiana': '🇬🇫',
+      'Chile': '🇨🇱',
+      'Costa Rica': '🇨🇷',
+      'Nicaragua': '🇳🇮',
+      'Honduras': '🇭🇳',
+      'El Salvador': '🇸🇻',
+      'Guatemala': '🇬🇹',
+      'Belize': '🇧🇿',
+      'Cuba': '🇨🇺',
+      'Jamaica': '🇯🇲',
+      'Haiti': '🇭🇹',
+      'Dominican Republic': '🇩🇴',
+      'Puerto Rico': '🇵🇷',
+      'Trinidad and Tobago': '🇹🇹',
+      'Barbados': '🇧🇧',
+      'Bahamas': '🇧🇸',
+      'Antigua and Barbuda': '🇦🇬',
+      'Dominica': '🇩🇲',
+      'St Lucia': '🇱🇨',
+      'St Vincent': '🇻🇨',
+      'Grenada': '🇬🇩',
+      'St Kitts and Nevis': '🇰🇳'
+    };
+    
+    if (flagMap[countryName]) {
+      return flagMap[countryName];
+    }
+    
+    for (const [key, value] of Object.entries(flagMap)) {
+      if (countryName && countryName.toLowerCase().includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+    
+    return '🌍';
+  };
 
   // Document data for containers
   const containerDocuments = {
@@ -210,7 +400,7 @@ const FreightForwarderBookings = () => {
     ]
   };
 
-  // Enhanced Container Data for Freight Forwarder
+  // Complete Container Data for Freight Forwarder
   const containersData = [
     {
       id: 'FF-001',
@@ -358,24 +548,498 @@ const FreightForwarderBookings = () => {
       originalShippingDate: '2026-08-01',
       originalPlaceOfDelivery: 'Kampala, Uganda'
     },
-    // ... (rest of the containersData array - truncated for brevity, but should include all data)
+    {
+      id: 'FF-002',
+      sealNo: 'SEAL-45612',
+      serviceName: 'MV Indian Trader',
+      size: '20ft ST',
+      packages: 15,
+      grossWeight: '18,200 kg',
+      volume: '33.2 m³',
+      measurement: '6.0m x 2.4m x 2.6m',
+      cargoDescription: 'Textile Fabrics and Dyeing Agents',
+      exporter: 'Global Textiles Uganda Ltd',
+      consignee: {
+        name: 'Global Textiles Uganda Ltd',
+        contact: '+256 712 345678',
+        email: 'purchasing@globaltextiles.ug',
+        address: '456 Industrial Area, Kampala, Uganda'
+      },
+      status: 'At Port',
+      location: 'Mombasa Port - Export Terminal',
+      voyage: 'MV Indian Trader',
+      eta: '18 Aug 2026',
+      daysAtSea: 0,
+      assignedAgent: {
+        id: 'AGT-001',
+        name: 'Swift Clearance Services',
+        email: 'info@swiftclearance.com',
+        contact: '+254 711 123456'
+      },
+      assignedTransporter: {
+        id: 'TRP-001',
+        name: 'East African Logistics',
+        email: 'dispatch@eastafricalogistics.com',
+        contact: '+256 712 345678'
+      },
+      agentProgress: 65,
+      agentStatus: 'Document Submission in Progress',
+      assignmentDate: '2026-08-05',
+      assignmentStatus: 'Pending',
+      clearanceStatus: 'Awaiting Documents',
+      daysInPort: 3,
+      transitStatus: 'At Port',
+      expectedArrivalDate: '2026-08-18',
+      shipDetails: 'MV Indian Trader | Voyage: 2026-07',
+      transporterReady: false,
+      paymentStatus: 'Pending',
+      transporterProgress: 30,
+      transporterStatus: 'Loading at Port',
+      transporterLocation: 'Mombasa Port',
+      transporterETA: '2026-08-16 14:00',
+      declaredCargoValue: '$89,500.00',
+      shippingDate: '2026-08-05',
+      placeOfFinalDelivery: 'Kampala, Uganda',
+      preCarriageBy: 'Rail',
+      placeOfReceipt: 'Mombasa, Kenya',
+      vesselName: 'MV Indian Trader',
+      vesselSCAC: 'INDI',
+      voyageNumber: '2026-07',
+      countryFlag: 'India',
+      portOfLoading: 'Mumbai, India',
+      loadingPierTerminal: 'Terminal 1',
+      originalsToBeReleasedAt: 'Mombasa Port Office',
+      portOfDischarge: 'Mombasa, Kenya',
+      typeOfMovement: 'Port to Door',
+      packingLists: [
+        {
+          id: 'PL-004',
+          name: 'Packing List 1 - Textile Fabrics',
+          packages: [
+            {
+              id: 'PKG-005',
+              name: 'Cotton Fabrics Package',
+              quantity: 10,
+              items: [
+                { name: 'Cotton Rolls', quantity: 150, unit: 'meters' },
+                { name: 'Dyed Fabrics', quantity: 80, unit: 'meters' }
+              ]
+            },
+            {
+              id: 'PKG-006',
+              name: 'Synthetic Fabrics Package',
+              quantity: 5,
+              items: [
+                { name: 'Polyester Rolls', quantity: 120, unit: 'meters' },
+                { name: 'Nylon Sheets', quantity: 60, unit: 'meters' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'PL-005',
+          name: 'Packing List 2 - Dyeing Agents',
+          packages: [
+            {
+              id: 'PKG-007',
+              name: 'Chemical Dyes Package',
+              quantity: 8,
+              items: [
+                { name: 'Reactive Dyes', quantity: 40, unit: 'kg' },
+                { name: 'Disperse Dyes', quantity: 35, unit: 'kg' }
+              ]
+            }
+          ]
+        }
+      ],
+      milestones: [
+        { stage: 'Supplier dispatched goods', date: '01 Aug 2026', completed: true },
+        { stage: 'Vessel departed', date: '08 Aug 2026', completed: true },
+        { stage: 'Arrived Mombasa', date: '12 Aug 2026', completed: true },
+        { stage: 'Customs inspection', date: '14 Aug 2026', completed: false },
+        { stage: 'Delivery', date: '18 Aug 2026', completed: false },
+      ],
+      trackingHistory: [
+        { date: '2026-08-08 10:20', location: 'Mumbai Port, India', status: 'Departed' },
+        { date: '2026-08-11 16:45', location: 'Arabian Sea', status: 'In Transit' },
+        { date: '2026-08-12 08:00', location: 'Mombasa Port, Kenya', status: 'Arrived' }
+      ],
+      expectedDeparture: '2026-08-08',
+      expectedArrival: '2026-08-12',
+      delayed: false,
+      delayReason: null,
+      actionRequired: 'Submit UNBS CoC certificate',
+      daysInTransit: 4,
+      originalETA: '2026-08-18',
+      originalShippingDate: '2026-08-05',
+      originalPlaceOfDelivery: 'Kampala, Uganda'
+    },
+    {
+      id: 'FF-003',
+      sealNo: 'SEAL-89234',
+      serviceName: 'MV African Trader',
+      size: '40ft HC',
+      packages: 18,
+      grossWeight: '32,400 kg',
+      volume: '71.8 m³',
+      measurement: '12.2m x 2.4m x 2.9m',
+      cargoDescription: 'Industrial Machinery and Spare Parts',
+      exporter: 'Machinery Uganda Ltd',
+      consignee: {
+        name: 'Machinery Uganda Ltd',
+        contact: '+256 701 234567',
+        email: 'purchasing@machinery.ug',
+        address: '789 Industrial Park, Kampala, Uganda'
+      },
+      status: 'Cleared',
+      location: 'Nairobi Warehouse',
+      voyage: 'MV African Trader',
+      eta: 'Delivered 05 Aug 2026',
+      daysAtSea: 0,
+      assignedAgent: {
+        id: 'AGT-001',
+        name: 'Swift Clearance Services',
+        email: 'info@swiftclearance.com',
+        contact: '+254 711 123456'
+      },
+      assignedTransporter: {
+        id: 'TRP-002',
+        name: 'Trans-East Cargo Services',
+        email: 'dispatch@trans-eastcargo.com',
+        contact: '+256 703 456789'
+      },
+      agentProgress: 100,
+      agentStatus: 'Completed',
+      assignmentDate: '2026-07-20',
+      assignmentStatus: 'Completed',
+      clearanceStatus: 'Cleared',
+      daysInPort: 0,
+      transitStatus: 'Delivered',
+      expectedArrivalDate: '2026-07-25',
+      shipDetails: 'MV African Trader | Voyage: 2026-06',
+      transporterReady: true,
+      paymentStatus: 'Paid',
+      transporterProgress: 100,
+      transporterStatus: 'Delivered',
+      transporterLocation: 'Nairobi Warehouse',
+      transporterETA: 'Delivered',
+      declaredCargoValue: '$187,200.00',
+      shippingDate: '2026-07-20',
+      placeOfFinalDelivery: 'Kampala, Uganda',
+      preCarriageBy: 'Truck',
+      placeOfReceipt: 'Nairobi, Kenya',
+      vesselName: 'MV African Trader',
+      vesselSCAC: 'AFTR',
+      voyageNumber: '2026-06',
+      countryFlag: 'South Africa',
+      portOfLoading: 'Durban, South Africa',
+      loadingPierTerminal: 'Terminal 2',
+      originalsToBeReleasedAt: 'Mombasa Port Office',
+      portOfDischarge: 'Mombasa, Kenya',
+      typeOfMovement: 'Door to Door',
+      packingLists: [
+        {
+          id: 'PL-006',
+          name: 'Packing List 1 - Machinery',
+          packages: [
+            {
+              id: 'PKG-008',
+              name: 'Main Machinery Package',
+              quantity: 6,
+              items: [
+                { name: 'Industrial Press Machines', quantity: 2, unit: 'units' },
+                { name: 'Conveyor Systems', quantity: 4, unit: 'units' }
+              ]
+            },
+            {
+              id: 'PKG-009',
+              name: 'Spare Parts Package',
+              quantity: 12,
+              items: [
+                { name: 'Motors', quantity: 8, unit: 'units' },
+                { name: 'Belts', quantity: 24, unit: 'pieces' },
+                { name: 'Bearings', quantity: 36, unit: 'pieces' }
+              ]
+            }
+          ]
+        }
+      ],
+      milestones: [
+        { stage: 'Supplier dispatched goods', date: '10 Jul 2026', completed: true },
+        { stage: 'Vessel departed', date: '20 Jul 2026', completed: true },
+        { stage: 'Arrived Mombasa', date: '25 Jul 2026', completed: true },
+        { stage: 'Customs inspection', date: '28 Jul 2026', completed: true },
+        { stage: 'Delivery', date: '05 Aug 2026', completed: true },
+      ],
+      trackingHistory: [
+        { date: '2026-07-20 08:30', location: 'Durban Port, South Africa', status: 'Departed' },
+        { date: '2026-07-25 14:15', location: 'Mombasa Port, Kenya', status: 'Arrived' },
+        { date: '2026-07-28 09:45', location: 'Mombasa Customs', status: 'Cleared' },
+        { date: '2026-08-05 16:20', location: 'Nairobi Warehouse', status: 'Delivered' }
+      ],
+      expectedDeparture: '2026-07-20',
+      expectedArrival: '2026-07-25',
+      delayed: false,
+      delayReason: null,
+      actionRequired: 'Release final documents',
+      daysInTransit: 16,
+      originalETA: '2026-07-25',
+      originalShippingDate: '2026-07-20',
+      originalPlaceOfDelivery: 'Kampala, Uganda'
+    },
+    {
+      id: 'FF-004',
+      sealNo: 'SEAL-56789',
+      serviceName: 'MV Pacific Express',
+      size: '20ft ST',
+      packages: 20,
+      grossWeight: '15,800 kg',
+      volume: '33.2 m³',
+      measurement: '6.0m x 2.4m x 2.6m',
+      cargoDescription: 'Packaging Materials and Consumables',
+      exporter: 'Packaging Solutions Ltd',
+      consignee: {
+        name: 'Packaging Solutions Ltd',
+        contact: '+256 704 567890',
+        email: 'purchasing@packaging.ug',
+        address: '101 Packaging Way, Kampala, Uganda'
+      },
+      status: 'In Transit',
+      location: 'Pacific Ocean',
+      voyage: 'MV Pacific Express',
+      eta: '28 Sep 2026',
+      daysAtSea: 0,
+      assignedAgent: {
+        id: 'AGT-001',
+        name: 'Swift Clearance Services',
+        email: 'info@swiftclearance.com',
+        contact: '+254 711 123456'
+      },
+      assignedTransporter: null,
+      agentProgress: 25,
+      agentStatus: 'Awaiting Documents',
+      assignmentDate: '2026-09-01',
+      assignmentStatus: 'Accepted',
+      clearanceStatus: 'Not Started',
+      daysInPort: 0,
+      transitStatus: 'At Sea',
+      expectedArrivalDate: '2026-09-28',
+      shipDetails: 'MV Pacific Express | Voyage: 2026-08',
+      transporterReady: false,
+      paymentStatus: 'Pending',
+      transporterProgress: null,
+      transporterStatus: null,
+      transporterLocation: null,
+      transporterETA: null,
+      declaredCargoValue: '$52,300.00',
+      shippingDate: '2026-09-01',
+      placeOfFinalDelivery: 'Kampala, Uganda',
+      preCarriageBy: 'Truck',
+      placeOfReceipt: 'Nairobi, Kenya',
+      vesselName: 'MV Pacific Express',
+      vesselSCAC: 'PACI',
+      voyageNumber: '2026-08',
+      countryFlag: 'Panama',
+      portOfLoading: 'Shanghai, China',
+      loadingPierTerminal: 'Terminal 1',
+      originalsToBeReleasedAt: 'Mombasa Port Office',
+      portOfDischarge: 'Mombasa, Kenya',
+      typeOfMovement: 'Port to Door',
+      packingLists: [
+        {
+          id: 'PL-007',
+          name: 'Packing List 1 - Packaging Materials',
+          packages: [
+            {
+              id: 'PKG-010',
+              name: 'Cardboard Boxes Package',
+              quantity: 15,
+              items: [
+                { name: 'Standard Boxes', quantity: 500, unit: 'pieces' },
+                { name: 'Heavy Duty Boxes', quantity: 200, unit: 'pieces' }
+              ]
+            },
+            {
+              id: 'PKG-011',
+              name: 'Plastic Materials Package',
+              quantity: 5,
+              items: [
+                { name: 'Bubble Wrap', quantity: 300, unit: 'meters' },
+                { name: 'Plastic Sheets', quantity: 150, unit: 'meters' }
+              ]
+            }
+          ]
+        }
+      ],
+      milestones: [
+        { stage: 'Supplier dispatched goods', date: '01 Sep 2026', completed: true },
+        { stage: 'Vessel departed', date: '05 Sep 2026', completed: true },
+        { stage: 'Arrived Mombasa', date: '25 Sep 2026', completed: false },
+        { stage: 'Customs inspection', date: '28 Sep 2026', completed: false },
+        { stage: 'Delivery', date: '30 Sep 2026', completed: false },
+      ],
+      trackingHistory: [
+        { date: '2026-09-05 06:00', location: 'Shanghai Port, China', status: 'Departed' },
+        { date: '2026-09-08 12:30', location: 'Pacific Ocean', status: 'In Transit' }
+      ],
+      expectedDeparture: '2026-09-05',
+      expectedArrival: '2026-09-25',
+      delayed: false,
+      delayReason: null,
+      actionRequired: 'Prepare customs documentation',
+      daysInTransit: 3,
+      originalETA: '2026-09-28',
+      originalShippingDate: '2026-09-01',
+      originalPlaceOfDelivery: 'Kampala, Uganda'
+    },
+    {
+      id: 'FF-005',
+      sealNo: 'SEAL-34126',
+      serviceName: 'MV Europe Trader',
+      size: '40ft HC',
+      packages: 22,
+      grossWeight: '26,700 kg',
+      volume: '67.5 m³',
+      measurement: '12.2m x 2.4m x 2.9m',
+      cargoDescription: 'Automotive Components and Accessories',
+      exporter: 'AutoParts Uganda Ltd',
+      consignee: {
+        name: 'AutoParts Uganda Ltd',
+        contact: '+256 705 678901',
+        email: 'purchasing@autoparts.ug',
+        address: '789 Auto Strasse, Kampala, Uganda'
+      },
+      status: 'At Port',
+      location: 'Mombasa Port - Export Terminal',
+      voyage: 'MV Europe Trader',
+      eta: '15 Sep 2026',
+      daysAtSea: 0,
+      assignedAgent: {
+        id: 'AGT-001',
+        name: 'Swift Clearance Services',
+        email: 'info@swiftclearance.com',
+        contact: '+254 711 123456'
+      },
+      assignedTransporter: {
+        id: 'TRP-003',
+        name: 'Kampala Freight Forwarders',
+        email: 'info@kampalafreight.com',
+        contact: '+256 701 234567'
+      },
+      agentProgress: 40,
+      agentStatus: 'Document Review',
+      assignmentDate: '2026-08-25',
+      assignmentStatus: 'Refer',
+      clearanceStatus: 'On Hold',
+      daysInPort: 6,
+      transitStatus: 'At Port',
+      expectedArrivalDate: '2026-09-10',
+      shipDetails: 'MV Europe Trader | Voyage: 2026-07',
+      transporterReady: false,
+      paymentStatus: 'Pending',
+      transporterProgress: 10,
+      transporterStatus: 'Awaiting Customs Clearance',
+      transporterLocation: 'Mombasa Port - Export Terminal',
+      transporterETA: '2026-09-18 09:00',
+      declaredCargoValue: '$156,800.00',
+      shippingDate: '2026-08-25',
+      placeOfFinalDelivery: 'Kampala, Uganda',
+      preCarriageBy: 'Rail',
+      placeOfReceipt: 'Mombasa, Kenya',
+      vesselName: 'MV Europe Trader',
+      vesselSCAC: 'EURO',
+      voyageNumber: '2026-07',
+      countryFlag: 'Germany',
+      portOfLoading: 'Hamburg, Germany',
+      loadingPierTerminal: 'Terminal 3',
+      originalsToBeReleasedAt: 'Mombasa Port Office',
+      portOfDischarge: 'Mombasa, Kenya',
+      typeOfMovement: 'Port to Door',
+      packingLists: [
+        {
+          id: 'PL-008',
+          name: 'Packing List 1 - Engine Parts',
+          packages: [
+            {
+              id: 'PKG-012',
+              name: 'Engine Components Package',
+              quantity: 8,
+              items: [
+                { name: 'Pistons', quantity: 16, unit: 'pieces' },
+                { name: 'Cylinder Heads', quantity: 8, unit: 'pieces' }
+              ]
+            },
+            {
+              id: 'PKG-013',
+              name: 'Transmission Parts Package',
+              quantity: 6,
+              items: [
+                { name: 'Gearboxes', quantity: 4, unit: 'units' },
+                { name: 'Clutch Kits', quantity: 6, unit: 'kits' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'PL-009',
+          name: 'Packing List 2 - Electrical Parts',
+          packages: [
+            {
+              id: 'PKG-014',
+              name: 'Electrical Components Package',
+              quantity: 8,
+              items: [
+                { name: 'Alternators', quantity: 6, unit: 'units' },
+                { name: 'Starter Motors', quantity: 6, unit: 'units' },
+                { name: 'Wiring Harnesses', quantity: 12, unit: 'pieces' }
+              ]
+            }
+          ]
+        }
+      ],
+      milestones: [
+        { stage: 'Supplier dispatched goods', date: '20 Aug 2026', completed: true },
+        { stage: 'Vessel departed', date: '25 Aug 2026', completed: true },
+        { stage: 'Arrived Mombasa', date: '10 Sep 2026', completed: true },
+        { stage: 'Customs inspection', date: '12 Sep 2026', completed: false },
+        { stage: 'Delivery', date: '15 Sep 2026', completed: false },
+      ],
+      trackingHistory: [
+        { date: '2026-08-25 14:00', location: 'Hamburg Port, Germany', status: 'Departed' },
+        { date: '2026-08-28 20:30', location: 'North Sea', status: 'In Transit' },
+        { date: '2026-09-03 07:15', location: 'Suez Canal', status: 'In Transit' },
+        { date: '2026-09-10 09:45', location: 'Mombasa Port, Kenya', status: 'Arrived' }
+      ],
+      expectedDeparture: '2026-08-25',
+      expectedArrival: '2026-09-10',
+      delayed: true,
+      delayReason: 'Port congestion - 3 day delay',
+      actionRequired: 'Contact shipping line for updated ETA',
+      daysInTransit: 16,
+      originalETA: '2026-09-15',
+      originalShippingDate: '2026-08-25',
+      originalPlaceOfDelivery: 'Kampala, Uganda'
+    }
   ];
-
-  // Get unique exporters for filter
-  const getUniqueExporters = () => {
-    const exporters = containersData.map(c => c.exporter);
-    return ['all', ...new Set(exporters)];
-  };
 
   // Get status color function
   const getStatusColor = (status) => {
-    switch(status) {
-      case 'Cleared': return colors.success;
-      case 'At Port': return colors.warning;
-      case 'In Transit': return colors.info;
-      case 'Delivered': return colors.success;
-      default: return colors.info;
-    }
+    const statusMap = {
+      'Cleared': colors.success,
+      'At Port': colors.warning,
+      'In Transit': colors.info,
+      'Delivered': colors.success,
+      'Customs Hold': colors.danger,
+      'Documentation Pending': colors.warning,
+      'Awaiting Clearance': colors.info,
+      'On Hold': colors.danger,
+      'Released': colors.success,
+      'Inspection Required': colors.warning,
+      'Quarantined': colors.danger,
+      'Transit Delay': colors.danger,
+      'Port Congestion': colors.warning
+    };
+    return statusMap[status] || colors.info;
   };
 
   // Get assignment status color
@@ -456,17 +1120,14 @@ const FreightForwarderBookings = () => {
   const getFilteredContainers = () => {
     let filtered = [...containersData];
 
-    // Status filter
     if (containerFilter !== 'all') {
       filtered = filtered.filter(c => c.status === containerFilter);
     }
 
-    // Assignment status filter
     if (containerStatusFilter !== 'all') {
       filtered = filtered.filter(c => c.assignmentStatus === containerStatusFilter);
     }
 
-    // Search filter
     if (containerSearch) {
       const search = containerSearch.toLowerCase();
       filtered = filtered.filter(c =>
@@ -478,7 +1139,6 @@ const FreightForwarderBookings = () => {
       );
     }
 
-    // Sort
     switch(containerSortBy) {
       case 'date-desc':
         filtered.sort((a, b) => new Date(b.eta) - new Date(a.eta));
@@ -513,9 +1173,9 @@ const FreightForwarderBookings = () => {
   // Stats
   const containerStats = {
     total: containersData.length,
-    atPort: containersData.filter(c => c.status === 'At Port').length,
-    inTransit: containersData.filter(c => c.status === 'In Transit').length,
-    cleared: containersData.filter(c => c.status === 'Cleared').length,
+    atPort: containersData.filter(c => c.status === 'At Port' || c.status === 'Customs Hold' || c.status === 'Awaiting Clearance' || c.status === 'On Hold').length,
+    inTransit: containersData.filter(c => c.status === 'In Transit' || c.status === 'Transit Delay').length,
+    cleared: containersData.filter(c => c.status === 'Cleared' || c.status === 'Released').length,
     pending: containersData.filter(c => c.assignmentStatus === 'Pending').length,
     accepted: containersData.filter(c => c.assignmentStatus === 'Accepted').length,
     referred: containersData.filter(c => c.assignmentStatus === 'Refer').length
@@ -536,30 +1196,9 @@ const FreightForwarderBookings = () => {
   };
 
   const confirmAssignmentAction = () => {
-    console.log(`Action: ${actionType} on container ${selectedContainerForAction.id}`, actionReason);
     setShowActionModal(false);
     setSelectedContainerForAction(null);
     setActionReason('');
-    const updatedContainers = containersData.map(c => {
-      if (c.id === selectedContainerForAction.id) {
-        let newStatus = c.assignmentStatus;
-        switch(actionType) {
-          case 'accept':
-            newStatus = 'Accepted';
-            break;
-          case 'reject':
-            newStatus = 'Rejected';
-            break;
-          case 'refer':
-            newStatus = 'Refer';
-            break;
-          default:
-            break;
-        }
-        return { ...c, assignmentStatus: newStatus };
-      }
-      return c;
-    });
   };
 
   // Handle send freight invoice
@@ -571,17 +1210,10 @@ const FreightForwarderBookings = () => {
   };
 
   const confirmSendBill = () => {
-    console.log(`Sending freight invoice for ${selectedContainerForAction.id}: $${billAmount} - ${billDescription}`);
     setShowBillModal(false);
     setSelectedContainerForAction(null);
     setBillAmount('');
     setBillDescription('');
-    const updatedContainers = containersData.map(c => {
-      if (c.id === selectedContainerForAction.id) {
-        return { ...c, paymentStatus: 'Pending' };
-      }
-      return c;
-    });
   };
 
   // Handle notify exporter
@@ -593,7 +1225,6 @@ const FreightForwarderBookings = () => {
   };
 
   const confirmNotify = () => {
-    console.log(`Notifying ${notifyRecipient}: ${notifyMessage}`);
     setShowNotifyModal(false);
     setSelectedContainerForAction(null);
     setNotifyMessage('');
@@ -613,34 +1244,7 @@ const FreightForwarderBookings = () => {
   };
 
   const confirmEditBooking = () => {
-    console.log('Updated booking data:', editBookingData);
     setShowEditModal(false);
-    // Update the container data
-    const updatedContainers = containersData.map(c => {
-      if (c.id === editBookingData.id) {
-        return {
-          ...c,
-          eta: editBookingData.eta,
-          declaredCargoValue: editBookingData.declaredCargoValue,
-          shippingDate: editBookingData.shippingDate,
-          placeOfFinalDelivery: editBookingData.placeOfFinalDelivery,
-          preCarriageBy: editBookingData.preCarriageBy,
-          placeOfReceipt: editBookingData.placeOfReceipt,
-          vesselName: editBookingData.vesselName,
-          vesselSCAC: editBookingData.vesselSCAC,
-          voyageNumber: editBookingData.voyageNumber,
-          countryFlag: editBookingData.countryFlag,
-          portOfLoading: editBookingData.portOfLoading,
-          loadingPierTerminal: editBookingData.loadingPierTerminal,
-          originalsToBeReleasedAt: editBookingData.originalsToBeReleasedAt,
-          portOfDischarge: editBookingData.portOfDischarge,
-          typeOfMovement: editBookingData.typeOfMovement,
-          expectedArrivalDate: editBookingData.expectedArrivalDate,
-          originalETA: editBookingData.originalETA
-        };
-      }
-      return c;
-    });
     setEditBookingData(null);
   };
 
@@ -676,7 +1280,6 @@ const FreightForwarderBookings = () => {
   };
 
   const executePrint = () => {
-    console.log('Printing:', printOptions);
     setShowPrintModal(false);
     window.print();
   };
@@ -939,7 +1542,7 @@ const FreightForwarderBookings = () => {
             <div className="flex items-center gap-3">
               <DollarIcon className="w-5 h-5" style={{ color: colors.primary }} />
               <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Send Freight Invoice to Exporter
+                Send Freight Invoice
               </h3>
             </div>
             <button
@@ -953,9 +1556,6 @@ const FreightForwarderBookings = () => {
           <div className="p-4">
             <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
               Container: <span className="font-medium">{selectedContainerForAction.id}</span>
-            </p>
-            <p className={`text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Exporter: <span className="font-medium">{selectedContainerForAction.exporter}</span>
             </p>
             <div className="mb-4">
               <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -1040,7 +1640,6 @@ const FreightForwarderBookings = () => {
 
           <div className="p-4 overflow-y-auto max-h-[70vh]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Shipping Details */}
               <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
                 <h4 className={`font-medium text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Shipping Details</h4>
                 <div className="space-y-2">
@@ -1095,7 +1694,6 @@ const FreightForwarderBookings = () => {
                 </div>
               </div>
 
-              {/* Vessel & Route Details */}
               <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
                 <h4 className={`font-medium text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Vessel & Route Details</h4>
                 <div className="space-y-2">
@@ -1153,116 +1751,6 @@ const FreightForwarderBookings = () => {
                       type="text"
                       value={editBookingData.voyageNumber || ''}
                       onChange={(e) => setEditBookingData({...editBookingData, voyageNumber: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Port Details */}
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <h4 className={`font-medium text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Port Details</h4>
-                <div className="space-y-2">
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country Flag</label>
-                    <input
-                      type="text"
-                      value={editBookingData.countryFlag || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, countryFlag: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Loading</label>
-                    <input
-                      type="text"
-                      value={editBookingData.portOfLoading || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, portOfLoading: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Pier/Terminal</label>
-                    <input
-                      type="text"
-                      value={editBookingData.loadingPierTerminal || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, loadingPierTerminal: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Originals to be Released At</label>
-                    <input
-                      type="text"
-                      value={editBookingData.originalsToBeReleasedAt || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, originalsToBeReleasedAt: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Discharge & Movement Details */}
-              <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                <h4 className={`font-medium text-sm mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Discharge & Movement</h4>
-                <div className="space-y-2">
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Discharge</label>
-                    <input
-                      type="text"
-                      value={editBookingData.portOfDischarge || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, portOfDischarge: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Delivery</label>
-                    <input
-                      type="text"
-                      value={editBookingData.placeOfFinalDelivery || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, placeOfFinalDelivery: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type of Movement</label>
-                    <input
-                      type="text"
-                      value={editBookingData.typeOfMovement || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, typeOfMovement: e.target.value})}
-                      className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
-                        isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-                      }`}
-                      style={{ focusRingColor: colors.primary }}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Expected Arrival Date</label>
-                    <input
-                      type="date"
-                      value={editBookingData.expectedArrivalDate || ''}
-                      onChange={(e) => setEditBookingData({...editBookingData, expectedArrivalDate: e.target.value})}
                       className={`w-full mt-1 px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 ${
                         isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
                       }`}
@@ -1501,7 +1989,7 @@ const FreightForwarderBookings = () => {
     );
   };
 
-  // Render expanded container details
+  // Render expanded container details with Hide Details button at bottom
   const renderExpandedContainer = (container) => {
     const isExpanded = expandedContainerId === container.id;
     if (!isExpanded) return null;
@@ -1518,7 +2006,7 @@ const FreightForwarderBookings = () => {
 
     return (
       <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <td colSpan="9" className="p-0">
+        <td colSpan="8" className="p-0">
           <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
             {/* Status Banner */}
             <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2`}
@@ -1646,11 +2134,10 @@ const FreightForwarderBookings = () => {
               ))}
             </div>
 
-            {/* Tab Content */}
+            {/* Tab Content - Simplified for brevity, includes flag display */}
             <div className="space-y-4">
               {expandedContainerTab === 'info' && (
                 <div className="space-y-4">
-                  {/* Container Info Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Container No.</p>
@@ -1673,33 +2160,17 @@ const FreightForwarderBookings = () => {
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.packages}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Gross Weight</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.grossWeight}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Volume</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.volume}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Measurement</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.measurement}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</p>
                       <span className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1`}
                         style={{
                           backgroundColor: getStatusColor(container.status) + '20',
                           color: getStatusColor(container.status)
                         }}>
-                        {container.status === 'Cleared' && <CheckCircle className="w-3 h-3" />}
-                        {container.status === 'At Port' && <Anchor className="w-3 h-3" />}
-                        {container.status === 'In Transit' && <Ship className="w-3 h-3" />}
                         {container.status}
                       </span>
                     </div>
                   </div>
 
-                  {/* Assignment & Clearance Info */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Assignment Date</p>
@@ -1729,7 +2200,6 @@ const FreightForwarderBookings = () => {
                     </div>
                   </div>
 
-                  {/* Ship Details & Expected Arrival */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Ship Details</p>
@@ -1742,90 +2212,6 @@ const FreightForwarderBookings = () => {
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         {container.expectedArrivalDate || container.eta || 'N/A'}
                       </p>
-                    </div>
-                  </div>
-
-                  {/* Transporter Info */}
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                    <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      <Truck className="w-4 h-4" style={{ color: colors.primary }} />
-                      Assigned Inland Transporter
-                    </h4>
-                    {container.assignedTransporter ? (
-                      <div className="space-y-2">
-                        <div>
-                          <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {container.assignedTransporter.name}
-                          </p>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.assignedTransporter.email}
-                          </p>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {container.assignedTransporter.contact}
-                          </p>
-                        </div>
-                        {container.transporterProgress !== null && (
-                          <div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
-                                Transport Progress: {container.transporterProgress}%
-                              </span>
-                              <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                {container.transporterStatus}
-                              </span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{
-                                  width: `${container.transporterProgress}%`,
-                                  backgroundColor: getAgentProgressColor(container.transporterProgress)
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        No transporter assigned
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Exporter Info */}
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                    <h4 className={`font-medium text-sm mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      <User className="w-4 h-4" style={{ color: colors.primary }} />
-                      Exporter Details
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 text-sm">
-                        <Building className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.exporter}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Mail className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.email}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <Phone className="w-4 h-4" style={{ color: colors.primary }} />
-                        <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                          {container.consignee.contact}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleNotifyExporter(container)}
-                        className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                        style={{ backgroundColor: colors.info }}
-                      >
-                        <Mail className="w-3 h-3" />
-                        Notify Exporter
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1907,48 +2293,12 @@ const FreightForwarderBookings = () => {
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Country Flag</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.countryFlag || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Loading</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.portOfLoading || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading Pier/Terminal</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.loadingPierTerminal || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Originals Released At</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.originalsToBeReleasedAt || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Port of Discharge</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.portOfDischarge || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Place of Delivery</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.placeOfFinalDelivery || 'N/A'}
-                      </p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Type of Movement</p>
-                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.typeOfMovement || 'N/A'}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xl">{getCountryFlag(container.countryFlag)}</span>
+                        <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {container.countryFlag || 'N/A'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1956,20 +2306,9 @@ const FreightForwarderBookings = () => {
 
               {expandedContainerTab === 'packing' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Packing Lists ({container.packingLists.length})
-                    </h3>
-                    <button
-                      onClick={() => handlePrint(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Printer className="w-3 h-3" />
-                      Print
-                    </button>
-                  </div>
-
+                  <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Packing Lists ({container.packingLists.length})
+                  </h3>
                   {container.packingLists.map((packingList) => (
                     <div key={packingList.id} className={`border rounded-lg overflow-hidden ${
                       isDark ? 'border-gray-700' : 'border-gray-200'
@@ -2037,41 +2376,17 @@ const FreightForwarderBookings = () => {
 
               {expandedContainerTab === 'tracking' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Map className="w-5 h-5" style={{ color: colors.primary }} />
-                      <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Container Tracking
-                      </h3>
-                    </div>
-                    <button
-                      onClick={() => handlePrint(container)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:opacity-90 flex items-center gap-1"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Printer className="w-3 h-3" />
-                      Print Tracking
-                    </button>
-                  </div>
-
-                  <div className={`p-6 rounded-lg border-2 border-dashed text-center ${
-                    isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-white'
-                  }`}>
-                    <Navigation className="w-12 h-12 mx-auto mb-3" style={{ color: colors.primary }} />
-                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Map View - Container {container.id}
-                    </p>
-                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Container Tracking
+                  </h3>
+                  <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                       Current Location: {container.location}
                     </p>
-                    <button
-                      className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      Open Full Map View
-                    </button>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Expected Arrival: {container.expectedArrivalDate || container.eta}
+                    </p>
                   </div>
-
                   <div>
                     <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                       Shipment Milestones
@@ -2084,11 +2399,6 @@ const FreightForwarderBookings = () => {
                               <CheckCircle className="w-4 h-4" style={{ color: colors.success }} />
                             ) : (
                               <Clock className="w-4 h-4" style={{ color: colors.warning }} />
-                            )}
-                            {idx < container.milestones.length - 1 && (
-                              <div className={`absolute top-6 w-0.5 h-8 ${
-                                milestone.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
                             )}
                           </div>
                           <div className="flex-1">
@@ -2105,33 +2415,23 @@ const FreightForwarderBookings = () => {
                       ))}
                     </div>
                   </div>
-
-                  <div>
-                    <h4 className={`font-medium text-sm mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      Tracking History
-                    </h4>
-                    <div className="space-y-2">
-                      {container.trackingHistory.map((track, idx) => (
-                        <div key={idx} className={`p-3 rounded-lg flex items-center justify-between ${
-                          isDark ? 'bg-gray-700' : 'bg-white'
-                        }`}>
-                          <div>
-                            <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {track.location}
-                            </p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {track.status}
-                            </p>
-                          </div>
-                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {track.date}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )}
+            </div>
+
+            {/* HIDE DETAILS BUTTON - AT THE BOTTOM */}
+            <div className="mt-4 pt-4 border-t flex justify-center" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+              <button
+                onClick={() => toggleContainerExpand(container.id)}
+                className="px-6 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:opacity-80 flex items-center gap-2"
+                style={{
+                  backgroundColor: colors.danger + '20',
+                  color: colors.danger
+                }}
+              >
+                <ChevronDown className="w-4 h-4 rotate-180" />
+                Hide Details
+              </button>
             </div>
           </div>
         </td>
@@ -2205,6 +2505,10 @@ const FreightForwarderBookings = () => {
                     <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>ETA:</span>
                     <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.expectedArrivalDate || container.eta}</span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Flag:</span>
+                    <span className="text-lg">{getCountryFlag(container.countryFlag)}</span>
+                  </div>
                   {container.delayed && (
                     <div className="flex justify-between text-red-500">
                       <span className="text-xs">⚠️ Delayed</span>
@@ -2222,96 +2526,6 @@ const FreightForwarderBookings = () => {
                   </button>
                 </div>
               </div>
-              {expandedContainerId === container.id && (
-                <div className={`p-4 border-t ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                  <div className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Cargo:</span>
-                      <span className={`text-right ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {container.cargoDescription}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Transporter:</span>
-                      <span className={isDark ? 'text-white' : 'text-gray-900'}>
-                        {container.assignedTransporter?.name || 'Not Assigned'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Clearance:</span>
-                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full`}
-                        style={{
-                          backgroundColor: getClearanceStatusColor(container.clearanceStatus) + '20',
-                          color: getClearanceStatusColor(container.clearanceStatus)
-                        }}>
-                        {container.clearanceStatus}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {container.assignmentStatus === 'Pending' && (
-                        <>
-                          <button
-                            onClick={() => handleAssignmentAction(container, 'accept')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.success }}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleAssignmentAction(container, 'reject')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.danger }}
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => handleAssignmentAction(container, 'refer')}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.info }}
-                          >
-                            Refer
-                          </button>
-                        </>
-                      )}
-                      {container.assignmentStatus === 'Accepted' && (
-                        <>
-                          <button
-                            onClick={() => handleEditBooking(container)}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.primary }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleSendBill(container)}
-                            className="flex-1 min-w-[80px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.success }}
-                          >
-                            Invoice
-                          </button>
-                          <button
-                            onClick={() => handleNotifyExporter(container)}
-                            className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium text-white transition-all duration-200 hover:opacity-90"
-                            style={{ backgroundColor: colors.info }}
-                          >
-                            Notify
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => toggleContainerExpand(container.id)}
-                        className="flex-1 min-w-[60px] px-2 py-1 rounded text-xs font-medium border transition-all duration-200 hover:opacity-90"
-                        style={{
-                          borderColor: colors.primary,
-                          color: colors.primary
-                        }}
-                      >
-                        Details
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -2401,7 +2615,6 @@ const FreightForwarderBookings = () => {
     );
   };
 
-  // Main return with alerts card removed
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
       <div className="max-w-7xl mx-auto">
@@ -2538,7 +2751,7 @@ const FreightForwarderBookings = () => {
           </div>
         </div>
 
-        {/* Single Column Layout - Full Width Table (Alerts Removed) */}
+        {/* Full Width Table */}
         <div className="w-full">
           <div id="containers-section" className={`rounded-lg p-4 md:p-6 transition-all duration-300 ${
             isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white shadow-md'
@@ -2765,9 +2978,13 @@ const FreightForwarderBookings = () => {
                                       e.stopPropagation();
                                       toggleContainerExpand(container.id);
                                     }}
-                                    title="View"
+                                    title={expandedContainerId === container.id ? 'Hide Details' : 'View Details'}
                                   >
-                                    <Eye className="w-3.5 h-3.5" />
+                                    {expandedContainerId === container.id ? (
+                                      <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                                    ) : (
+                                      <Eye className="w-3.5 h-3.5" />
+                                    )}
                                   </button>
                                   {container.assignmentStatus === 'Pending' && (
                                     <>

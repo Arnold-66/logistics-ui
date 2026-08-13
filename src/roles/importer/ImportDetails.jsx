@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import ProgressBar from '../../components/ProgressBar';
 
 // Helper function to get file icon
 const getFileIcon = (fileType) => {
@@ -77,25 +78,48 @@ const formatDate = (dateString) => {
 const ImportDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const [importData, setImportData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [viewingDocument, setViewingDocument] = useState(null);
 
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;
+
+  // Progress steps for the progress bar
+  const progressSteps = [
+    { id: 0, title: 'Preparation', description: 'Items added and ready for review' },
+    { id: 1, title: 'Review', description: 'Items reviewed and verified' },
+    { id: 2, title: 'Sent', description: 'Sent to suppliers for confirmation' },
+    { id: 3, title: 'Confirmed', description: 'Supplier confirmation received' },
+    { id: 4, title: 'Finalized', description: 'Order finalized and documents uploaded' },
+    { id: 5, title: 'Complete', description: 'Import process completed' }
+  ];
+
+  // Map status to step index
+  const getCurrentStepIndex = (status) => {
+    const stepMap = {
+      'draft': 0,
+      'sent': 2,
+      'review': 2,
+      'confirmed': 3,
+      'finalized': 4,
+      'complete': 5
+    };
+    return stepMap[status] || 0;
+  };
 
   useEffect(() => {
     // Get import data from location state or localStorage
@@ -180,24 +204,6 @@ const ImportDetails = () => {
       case 'complete': return <CheckCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
     }
-  };
-
-  const getStepStatus = (stepIndex) => {
-    if (!importData) return 'pending';
-    const status = importData.orderStatus || importData.status || 'draft';
-    const steps = [
-      { id: 0, status: 'preparation' },
-      { id: 1, status: 'review' },
-      { id: 2, status: 'sent' },
-      { id: 3, status: 'confirmed' },
-      { id: 4, status: 'invoice' },
-      { id: 5, status: 'finalized' }
-    ];
-    
-    const currentStepIndex = steps.findIndex(s => s.status === status);
-    if (stepIndex < currentStepIndex) return 'completed';
-    if (stepIndex === currentStepIndex) return 'current';
-    return 'pending';
   };
 
   const Toast = ({ message, type }) => {
@@ -313,22 +319,13 @@ const ImportDetails = () => {
   const invoice = importData.invoiceData || {};
   const freightInvoice = importData.freightInvoice || {};
   const customColumns = importData.customColumns || [];
+  const currentStep = getCurrentStepIndex(status);
 
   // Calculate totals
   const totalItemsValue = items.reduce((sum, item) => sum + (parseFloat(item.totalValue) || 0), 0);
   const taxAmount = totalItemsValue * 0.18;
   const shippingCost = totalItemsValue * 0.05;
   const grandTotal = totalItemsValue + taxAmount + shippingCost;
-
-  // Define steps for the progress bar
-  const steps = [
-    { id: 0, title: 'Preparation', icon: Package },
-    { id: 1, title: 'Review', icon: ClipboardList },
-    { id: 2, title: 'Send to Supplier', icon: Send },
-    { id: 3, title: 'Confirmation', icon: FileCheck },
-    { id: 4, title: 'Invoice & Payment', icon: DollarSign },
-    { id: 5, title: 'Finalisation', icon: FileSignature }
-  ];
 
   return (
     <div className="min-h-screen w-full p-4 md:p-6" style={{ backgroundColor: isDark ? '#1a1a2e' : '#f8fafc' }}>
@@ -349,7 +346,7 @@ const ImportDetails = () => {
             <h1 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               Import Details
             </h1>
-            <div className="flex items-center gap-3 mt-1">
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {importData.importNumber || 'Draft'}
               </p>
@@ -397,50 +394,33 @@ const ImportDetails = () => {
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              Import Progress
-            </span>
-            <span className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {importData.progress || 0}%
-            </span>
-          </div>
-          <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="absolute h-full rounded-full transition-all duration-500"
-              style={{ 
-                width: `${importData.progress || 0}%`,
-                background: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryLight}, ${colors.success})`
-              }}
-            />
-          </div>
-          <div className="flex justify-between mt-2">
-            {steps.map((step, index) => {
-              const stepStatus = getStepStatus(index);
-              const Icon = step.icon;
-              return (
-                <div key={step.id} className="flex flex-col items-center">
-                  <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all duration-200 ${
-                    stepStatus === 'completed' 
-                      ? 'bg-green-500 text-white' 
-                      : stepStatus === 'current' 
-                      ? 'text-white shadow-lg' 
-                      : isDark ? 'bg-gray-600 text-gray-400' : 'bg-gray-200 text-gray-500'
-                  }`}
-                  style={{
-                    backgroundColor: stepStatus === 'current' ? colors.primary : undefined
-                  }}>
-                    {stepStatus === 'completed' ? <CheckCircle className="w-3 h-3" /> : index + 1}
-                  </div>
-                  <span className={`text-[10px] mt-1 text-center ${stepStatus === 'current' ? 'font-bold' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {step.title}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        {/* Progress Bar using the component */}
+        <div className="mb-6">
+          <ProgressBar
+            steps={progressSteps}
+            currentStep={currentStep}
+            onStepClick={(step) => {
+              // Optional: navigate to the corresponding step in the import process
+              // You can add logic here if needed
+              console.log(`Clicked step ${step}`);
+            }}
+            stepColors={[
+              colors.primary,
+              colors.primaryLight,
+              colors.info,
+              colors.success,
+              colors.warning,
+              colors.success
+            ]}
+            theme={isDark ? 'dark' : 'light'}
+            size="sm"
+            showLabels={true}
+            showNumbers={true}
+            clickable={false}
+            showPercent={true}
+            showDescription={true}
+            progress={importData.progress || 0}
+          />
         </div>
 
         {/* Importer Details */}
@@ -587,7 +567,7 @@ const ImportDetails = () => {
             </div>
 
             {/* Supplier Confirmation Details */}
-            {status === 'confirmed' || status === 'finalized' || status === 'complete' && (
+            {(status === 'confirmed' || status === 'finalized' || status === 'complete') && (
               <div className="mt-4">
                 <h4 className={`font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Supplier Confirmation</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -705,8 +685,7 @@ const ImportDetails = () => {
                         <span className={`text-sm truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{doc.name}</span>
                         <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{formatFileSize(doc.size)}</span>
                       </div>
-                      <button
-                        onClick={() => setViewingDocument(doc)}
+                      <button                        onClick={() => setViewingDocument(doc)}
                         className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                       >
                         <Eye className="w-4 h-4 text-blue-500" />
@@ -866,30 +845,29 @@ const ImportDetails = () => {
             Back to My Imports
           </button>
 
-          {status !== 'complete' && status !== 'finalized' && (
-            <button
-              onClick={handleContinue}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Edit2 className="w-4 h-4" />
-              Continue Import
-            </button>
-          )}
-          
-          {status === 'complete' && (
-            <button
-              onClick={() => {
-                // Print functionality
-                window.print();
-              }}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Printer className="w-4 h-4" />
-              Print Details
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {status !== 'complete' && status !== 'finalized' && (
+              <button
+                onClick={handleContinue}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Edit2 className="w-4 h-4" />
+                Continue Import
+              </button>
+            )}
+            
+            {status === 'complete' && (
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Printer className="w-4 h-4" />
+                Print Details
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

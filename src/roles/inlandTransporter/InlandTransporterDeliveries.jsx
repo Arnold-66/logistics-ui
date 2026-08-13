@@ -64,7 +64,7 @@ import { useNavigate } from 'react-router-dom';
 
 const InlandTransporterDeliveries = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -80,20 +80,15 @@ const InlandTransporterDeliveries = () => {
   const [toast, setToast] = useState(null);
 
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
-    teal: '#14b8a6',
-    indigo: '#6366f1',
-    orange: '#f97316',
-    purple: '#8b5cf6',
-    pink: '#ec4899'
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc', // 80% opacity
+    primaryDark: theme.primary + '99',  // 60% opacity
+    primaryBg: theme.primary + '20',    // 12% opacity
+    primaryBgDark: theme.primary + '40', // 25% opacity
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: '#3b82f6', // Keep as fallback or use theme.secondary
   };
 
   const isDark = darkMode;

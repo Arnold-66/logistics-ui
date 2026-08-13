@@ -50,6 +50,8 @@ import { ThemeContext } from '../context/themeContext';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/authContext';
 import { useLocation } from 'react-router-dom';
+import ThemeSelector from '../components/ThemeSelector';
+
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -57,7 +59,7 @@ const Navbar = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { user, logout, loading } = useAuth();
   const [activeLink, setActiveLink] = useState('Dashboard');
-  const { darkMode, setDarkMode } = useContext(ThemeContext);
+  const { darkMode, setDarkMode, theme } = useContext(ThemeContext);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -67,12 +69,26 @@ const Navbar = () => {
   const mobileMenuRef = useRef(null);
 
   // Color theme
+  // const colors = {
+  //   primary: '#714b67',
+  //   primaryLight: '#8a5f7e',
+  //   primaryDark: '#5a3a52',
+  //   primaryBg: '#f5f0f4',
+  //   primaryBgDark: '#2d1f29',
+  // };
+
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc', // Add 80% opacity
+    primaryDark: theme.primary + '99', // Add 60% opacity
+    primaryBg: theme.primary + '20', // Add 12% opacity
+    primaryBgDark: theme.primary + '40', // Add 25% opacity
+    // Additional semantic colors from theme
+    secondary: theme.secondary,
+    accent: theme.accent,
+    success: theme.success,
+    danger: theme.danger,
+    warning: theme.warning,
   };
 
   const isDark = darkMode;
@@ -258,7 +274,6 @@ const Navbar = () => {
   const handleNewImport = () => navigate('/new-import');
   const handleNewExport = () => navigate('/new-export');
   const handleNewAssignment = () => navigate('/clearing-agent/assignment/new');
-  const handleNewBooking = () => navigate('/freight-forwarder/booking/process');
   const handleNewDispatch = () => navigate('/inland-transporter/dispatch/new');
   const handleNewUser = () => navigate('/admin/users');
   const handleLogout = () => {
@@ -423,17 +438,7 @@ const Navbar = () => {
                   </button>
                 )}
                 
-                {isFreightForwarder && (
-                  <button
-                    onClick={handleNewBooking}
-                    className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 rounded-lg text-[10px] sm:text-xs md:text-sm font-medium transition-all duration-300 hover:shadow-lg text-white"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4" />
-                    <span className="hidden xs:inline">New</span>
-                    <span className="hidden sm:inline"> Process Booking</span>
-                  </button>
-                )}
+               
                 
                 {/* {isInlandTransporter && (
                   <button
@@ -461,8 +466,11 @@ const Navbar = () => {
               </>
             )}
 
+            {/* Theme Selector - Color Palette Icon */}
+            <ThemeSelector />
+
             {/* Theme Toggle */}
-            <button
+            {/* <button
               onClick={toggleTheme}
               className={`p-1 sm:p-1.5 md:p-2 rounded-lg transition-colors ${
                 isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
@@ -474,9 +482,36 @@ const Navbar = () => {
               ) : (
                 <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-600" />
               )}
-            </button>
+            </button> */}
+
+
+              <button
+                onClick={toggleTheme}
+                className={`p-1 sm:p-1.5 md:p-2 rounded-lg transition-colors ${
+                  isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                }`}
+                title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {isDark ? (
+                  <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-yellow-400" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-600" />
+                )}
+              </button>
+
 
             {/* Role Switcher Button */}
+            {/* <button
+              onClick={() => navigate('/')}
+              className={`p-1 sm:p-1.5 md:p-2 rounded-lg transition-colors ${
+                isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+              title="Switch Role"
+            >
+              <Users className={`w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />
+            </button> */}
+
+
             <button
               onClick={() => navigate('/')}
               className={`p-1 sm:p-1.5 md:p-2 rounded-lg transition-colors ${

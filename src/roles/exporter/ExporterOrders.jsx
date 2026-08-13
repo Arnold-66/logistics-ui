@@ -264,7 +264,7 @@ const generateDummyOrders = () => {
 
 const ExporterOrders = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -283,23 +283,15 @@ const ExporterOrders = () => {
   const [pendingAction, setPendingAction] = useState(null);
 
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
-    purple: '#8b5cf6',
-    indigo: '#6366f1',
-    pink: '#ec4899',
-    teal: '#14b8a6',
-    orange: '#f97316',
-    cyan: '#06b6d4',
-    rose: '#f43f5e',
-    amber: '#d97706'
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc',
+    primaryDark: theme.primary + '99',
+    primaryBg: theme.primary + '20',
+    primaryBgDark: theme.primary + '40',
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: theme.secondary || '#3b82f6',
   };
 
   const isDark = darkMode;

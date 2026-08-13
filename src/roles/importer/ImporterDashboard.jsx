@@ -78,7 +78,8 @@ import {
   Upload,
   AlertOctagon as AlertIcon,
   Route,
-  Compass
+  Compass,
+  ChevronUp
 } from 'lucide-react';
 import { ThemeContext } from '../../context/themeContext';
 import { useAuth } from '../../context/authContext';
@@ -86,7 +87,8 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const ImporterDashboard = () => {
   const navigate = useNavigate();
-  const { darkMode } = useContext(ThemeContext);
+  const { darkMode, theme } = useContext(ThemeContext);
+  
   const { user } = useAuth();
   
   const [isLoading, setIsLoading] = useState(false);
@@ -152,15 +154,15 @@ const ImporterDashboard = () => {
 
   // Color theme
   const colors = {
-    primary: '#714b67',
-    primaryLight: '#8a5f7e',
-    primaryDark: '#5a3a52',
-    primaryBg: '#f5f0f4',
-    primaryBgDark: '#2d1f29',
-    success: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    info: '#3b82f6',
+    primary: theme.primary,
+    primaryLight: theme.primary + 'cc', // 80% opacity
+    primaryDark: theme.primary + '99',  // 60% opacity
+    primaryBg: theme.primary + '20',    // 12% opacity
+    primaryBgDark: theme.primary + '40', // 25% opacity
+    success: theme.success || '#10b981',
+    warning: theme.accent || '#f59e0b',
+    danger: theme.danger || '#ef4444',
+    info: '#3b82f6', // Keep as fallback or use theme.secondary
   };
 
   const isDark = darkMode;
@@ -262,6 +264,7 @@ const ImporterDashboard = () => {
   const containersData = [
     {
       id: 'MSKU-458921',
+      orderNo: 'ORD-2026-001',
       sealNo: 'SEAL-78923',
       serviceName: 'MV Star Express',
       size: '40ft HC',
@@ -370,6 +373,7 @@ const ImporterDashboard = () => {
     },
     {
       id: 'IN-782341',
+      orderNo: 'ORD-2026-002',
       sealNo: 'SEAL-45612',
       serviceName: 'MV Indian Trader',
       size: '20ft ST',
@@ -469,6 +473,7 @@ const ImporterDashboard = () => {
     },
     {
       id: 'SA-456732',
+      orderNo: 'ORD-2026-003',
       sealNo: 'SEAL-89234',
       serviceName: 'MV African Trader',
       size: '40ft HC',
@@ -555,6 +560,7 @@ const ImporterDashboard = () => {
     },
     {
       id: 'PK-893421',
+      orderNo: 'ORD-2026-004',
       sealNo: 'SEAL-56789',
       serviceName: 'MV Pacific Express',
       size: '20ft ST',
@@ -628,6 +634,7 @@ const ImporterDashboard = () => {
     },
     {
       id: 'DE-782341',
+      orderNo: 'ORD-2026-005',
       sealNo: 'SEAL-34126',
       serviceName: 'MV Europe Trader',
       size: '40ft HC',
@@ -879,6 +886,7 @@ const ImporterDashboard = () => {
       const search = containerSearch.toLowerCase();
       filtered = filtered.filter(c => 
         c.id.toLowerCase().includes(search) ||
+        c.orderNo.toLowerCase().includes(search) ||
         c.sealNo.toLowerCase().includes(search) ||
         c.voyage.toLowerCase().includes(search) ||
         c.cargoDescription.toLowerCase().includes(search) ||
@@ -1092,10 +1100,7 @@ const ImporterDashboard = () => {
 
   // Handle card click to filter by status
   const handleCardClick = (status) => {
-    // Reset to first page when filtering
     setCurrentPage(1);
-    
-    // If clicking the same status, deselect it (show all)
     if (containerFilter === status) {
       setContainerFilter('all');
     } else {
@@ -1103,7 +1108,7 @@ const ImporterDashboard = () => {
     }
   };
 
-  // Render Print Modal with light background fix
+  // Render Print Modal
   const PrintModal = () => {
     if (!showPrintModal || !printContainer) return null;
 
@@ -1462,7 +1467,7 @@ const ImporterDashboard = () => {
     );
   };
 
-  // Render Assign Agent Modal with light background fix
+  // Render Assign Agent Modal
   const AssignAgentModal = () => {
     if (!showAssignAgentModal || !selectedContainerForAssignment) return null;
 
@@ -1667,7 +1672,7 @@ const ImporterDashboard = () => {
 
     return (
       <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <td colSpan="8" className="p-0">
+        <td colSpan="7" className="p-0">
           <div className={`p-4 md:p-6 ${isDark ? 'bg-gray-800/80' : 'bg-gray-50'}`}>
             {/* Status Banner */}
             <div className={`mb-4 p-3 rounded-lg flex items-center justify-between flex-wrap gap-2 ${
@@ -1737,11 +1742,15 @@ const ImporterDashboard = () => {
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.id}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Order No.</p>
+                      <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.orderNo}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
                       <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seal No.</p>
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.sealNo}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
-                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Service Name</p>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Voyage</p>
                       <p className={`font-medium text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{container.voyage}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-white'}`}>
@@ -2338,6 +2347,18 @@ const ImporterDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Collapse Arrow at Bottom */}
+            <div className="mt-4 pt-3 border-t flex justify-center" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+              <button
+                onClick={() => toggleContainerExpand(container.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+                style={{ color: colors.primary }}
+              >
+                <ChevronUp className="w-4 h-4" />
+                <span className="text-xs font-medium">Hide Details</span>
+              </button>
+            </div>
           </div>
         </td>
       </tr>
@@ -2372,8 +2393,8 @@ const ImporterDashboard = () => {
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Seal:</span>
-                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.sealNo}</span>
+                    <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Order:</span>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>{container.orderNo}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Voyage:</span>
@@ -2506,6 +2527,17 @@ const ImporterDashboard = () => {
                         }}
                       >
                         Full Details
+                      </button>
+                    </div>
+                    {/* Collapse Arrow in Grid View */}
+                    <div className="flex justify-center mt-3 pt-2 border-t" style={{ borderColor: isDark ? '#374151' : '#e5e7eb' }}>
+                      <button
+                        onClick={() => toggleContainerExpand(container.id)}
+                        className="flex items-center gap-1 px-3 py-1 rounded-lg transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        style={{ color: colors.primary }}
+                      >
+                        <ChevronUp className="w-3 h-3" />
+                        <span className="text-[10px]">Hide Details</span>
                       </button>
                     </div>
                   </div>
@@ -2893,10 +2925,7 @@ const ImporterDashboard = () => {
                       <thead>
                         <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Container
-                          </th>
-                          <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Seal
+                            Order No
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Voyage
@@ -2908,7 +2937,7 @@ const ImporterDashboard = () => {
                             Supplier
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Pkg
+                            Packages
                           </th>
                           <th className={`text-left py-2 px-2 font-medium text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             Assignments
@@ -2930,16 +2959,10 @@ const ImporterDashboard = () => {
                             >
                               <td className="py-2 px-2">
                                 <div className="flex items-center gap-1">
-                                  <Anchor className="w-3 h-3" style={{ color: colors.primary }} />
                                   <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {container.id}
+                                    {container.orderNo}
                                   </span>
                                 </div>
-                              </td>
-                              <td className="py-2 px-2">
-                                <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                  {container.sealNo}
-                                </span>
                               </td>
                               <td className="py-2 px-2">
                                 <span className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -2962,9 +2985,20 @@ const ImporterDashboard = () => {
                                 </span>
                               </td>
                               <td className="py-2 px-2">
-                                <span className={`font-medium text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                <button
+                                  className={`font-medium text-xs px-2 py-1 rounded-lg transition-all duration-200 hover:opacity-80 flex items-center gap-1 ${
+                                    isDark ? 'text-white hover:bg-gray-600' : 'text-gray-900 hover:bg-gray-100'
+                                  }`}
+                                  style={{ color: colors.primary }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleContainerExpand(container.id);
+                                    setExpandedContainerTab('packing');
+                                  }}
+                                >
+                                  <Package className="w-3 h-3" />
                                   {container.packages}
-                                </span>
+                                </button>
                               </td>
                               <td className="py-2 px-2">
                                 <div className="space-y-1">
